@@ -1,0 +1,9 @@
+pnpm-lock.yaml
+.next
+src/generated
+.data
+docs/superpowers/specs
+coverage
+playwright-report
+test-results
+.superpowers

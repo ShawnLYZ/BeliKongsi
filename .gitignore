@@ -1,0 +1,40 @@
+# --- Secrets: never commit (build design §5.6) ---
+API_Key_Configuration.md
+.env
+.env.*
+!.env.example
+
+# --- The user's source materials, kept out of the public repo (build design §5.6) ---
+/PRD.md
+/belibijak-product-features.md
+/*.pdf
+/.claude/
+/skills-lock.json
+
+# --- Dependencies and build output ---
+node_modules/
+.next/
+out/
+build/
+dist/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+
+# --- Generated code ---
+src/generated/
+
+# --- Local databases, storage and test output ---
+.data/
+playwright-report/
+test-results/
+blob-report/
+
+# --- Tools ---
+.vercel/
+supabase/.temp/
+
+# --- OS and editor ---
+.DS_Store
+Thumbs.db
+*.log

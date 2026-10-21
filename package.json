@@ -1,0 +1,82 @@
+{
+  "name": "belikongsi",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.34.7",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:engine": "vitest run --project engine",
+    "test:api": "vitest run --project api",
+    "e2e": "playwright test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check:secrets": "tsx scripts/check-secrets.ts",
+    "prepare": "simple-git-hooks",
+    "db:dev": "tsx scripts/db-dev.ts",
+    "db:migrate": "tsx scripts/assert-local-db.ts && prisma migrate dev",
+    "db:setup-role": "tsx scripts/db-setup-role.ts",
+    "db:reset": "tsx scripts/assert-local-db.ts && prisma migrate reset --force && pnpm db:setup-role",
+    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm check:secrets --all && pnpm test && pnpm build",
+    "postinstall": "prisma generate"
+  },
+  "devDependencies": {
+    "@playwright/test": "~1.64.1",
+    "@tailwindcss/postcss": "~4.3.3",
+    "@types/node": "^24.19.2",
+    "@types/pg": "^8.23.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "embedded-postgres": "17.10.0-beta.17",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "~16.4.2",
+    "prettier": "^3.9.10",
+    "prettier-plugin-tailwindcss": "^0.8.1",
+    "prisma": "7.10.1",
+    "shadcn": "^4.22.1",
+    "simple-git-hooks": "^2.14.0",
+    "tailwindcss": "~4.3.3",
+    "tsx": "^4.23.15",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.72.0",
+    "vitest": "^5.0.5"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "pnpm check:secrets --staged"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "7.10.1",
+    "@prisma/client": "7.10.1",
+    "class-variance-authority": "^0.7.1",
+    "cn": "^0.5.0",
+    "lucide-react": "^1.60.0",
+    "next": "~16.4.2",
+    "pg": "^8.23.1",
+    "radix-ui": "^1.8.1",
+    "react": "~19.3.1",
+    "react-dom": "~19.3.1",
+    "tw-animate-css": "^1.4.0",
+    "zod": "^4.6.7"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@embedded-postgres/windows-x64",
+      "@prisma/engines",
+      "prisma",
+      "@embedded-postgres/linux-x64",
+      "@embedded-postgres/linux-arm64",
+      "@embedded-postgres/linux-arm",
+      "@embedded-postgres/linux-ia32",
+      "@embedded-postgres/linux-ppc64",
+      "@embedded-postgres/darwin-arm64",
+      "@embedded-postgres/darwin-x64"
+    ]
+  }
+}
