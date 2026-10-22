@@ -9,11 +9,14 @@ export function TierLadder({
   buyAlonePriceSen,
   currentTier,
   unitName,
+  currentLabel = 'Now',
 }: {
   tiers: TierView[];
   buyAlonePriceSen: number;
   currentTier: number | null;
   unitName: string;
+  /** The badge on the marked tier: "Now" while open, "Final" once closed. */
+  currentLabel?: string;
 }) {
   return (
     <div className="flex flex-col gap-2">
@@ -39,7 +42,7 @@ export function TierLadder({
               <span className="flex items-center gap-2">
                 {current ? (
                   <span className="bg-primary text-primary-foreground rounded-full px-2 text-base">
-                    Now
+                    {currentLabel}
                   </span>
                 ) : null}
                 <Money sen={t.unitPriceSen} className="whitespace-nowrap" />

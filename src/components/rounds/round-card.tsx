@@ -6,6 +6,7 @@ import { BUTTON_SECONDARY } from '@/components/common/controls';
 import { Money } from '@/components/common/money';
 import { Countdown } from './countdown';
 import { ProgressBar } from './progress-bar';
+import { CLOSING_TEXT, isClosing } from './status-words';
 import { TierLadder } from './tier-ladder';
 
 /**
@@ -44,7 +45,10 @@ export function MyPriceBox({ myPrice }: { myPrice: OpenRoundView['myPrice'] }) {
   );
 }
 
-/** One open round on the open-rounds page (PRD §22). */
+/**
+ * One open round on the open-rounds page (PRD §22). Past its cut-off (by the app's clock) and not
+ * yet closed by the close job, it says "Closing…" (R11).
+ */
 export function RoundCard({
   round,
   supplierName,
@@ -56,6 +60,7 @@ export function RoundCard({
   category: string;
   serverNow: string;
 }) {
+  const closing = isClosing(round.cutoffAt, serverNow);
   return (
     <article
       aria-labelledby={`round-${round.roundId}`}
@@ -75,6 +80,11 @@ export function RoundCard({
           <h2 id={`round-${round.roundId}`} className="text-lg leading-snug font-semibold">
             {round.name}
           </h2>
+          {closing ? (
+            <p className="bg-accent text-accent-foreground w-fit rounded-full px-2 text-base font-semibold">
+              {CLOSING_TEXT}
+            </p>
+          ) : null}
           <p className="text-base">{round.packDescription}</p>
           {supplierName ? (
             <p className="text-muted-foreground text-base">From {supplierName}</p>
@@ -88,7 +98,7 @@ export function RoundCard({
         unitName={round.unitName}
       />
       <ProgressBar progress={round.progress} tiers={round.tiers} unitName={round.unitName} />
-      <Countdown cutoffAt={round.cutoffAt} serverNow={serverNow} />
+      <Countdown cutoffAt={round.cutoffAt} serverNow={serverNow} passedText={CLOSING_TEXT} />
       <MyPriceBox myPrice={round.myPrice} />
       <Link href={`/owner/rounds/${round.roundId}`} className={BUTTON_SECONDARY}>
         See details<span className="sr-only"> of {round.name}</span>

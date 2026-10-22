@@ -9,6 +9,7 @@ import { conflict, notFound } from '@/server/platform/errors';
 import { UUID } from '@/server/platform/ids';
 import type { TxContext } from '@/server/platform/tx';
 import { settlePayment } from './complete';
+import { lockRounds } from './fee';
 
 export type { PaymentSummary } from '@/lib/views/payments';
 
@@ -63,6 +64,12 @@ export async function createPayment(
 ): Promise<PaymentSummary> {
   const { tx, deps } = ctx;
   if (!UUID.test(input.shopId)) throw notFound('Shop');
+  // The rounds before the shop (see lockRounds): settling at once below must not wait for a round
+  // while it holds the shop that a close of that round needs.
+  await lockRounds(
+    ctx,
+    input.lines.map((l) => l.roundId),
+  );
   // One payment is created at a time per shop, so two cannot plan to use the same balance.
   const lockedShop = await tx.$queryRaw<{ id: string }[]>`
     SELECT id FROM shops WHERE id = ${input.shopId}::uuid FOR UPDATE`;

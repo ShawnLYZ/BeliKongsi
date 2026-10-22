@@ -112,3 +112,46 @@ export async function totalsByProductKey(app: TestApp): Promise<Record<string, n
   }
   return totals;
 }
+
+/** A product's round for an ISO week (its `cycleLabel`, such as `2026-W45`). Throws when it has none. */
+export async function roundOf(productKey: string, week: string) {
+  return getDeps().prisma.round.findFirstOrThrow({
+    where: { productId: p(productKey), cycleLabel: week },
+    orderBy: [{ opensAt: 'desc' }, { id: 'desc' }],
+  });
+}
+
+/** The supplier order drafted for a round. Throws when there is none. */
+export async function supplierOrderOf(roundId: string) {
+  return getDeps().prisma.supplierOrder.findUniqueOrThrow({ where: { roundId } });
+}
+
+/** A product's open round. Throws when it has none. */
+export async function openRoundOf(productKey: string) {
+  return getDeps().prisma.round.findFirstOrThrow({
+    where: { productId: p(productKey), status: 'open' },
+  });
+}
+
+/**
+ * The text of the latest WhatsApp-ready notification of a type sent to a user (newest first).
+ * `contains`, when given, keeps only messages whose text includes it, ignoring case.
+ */
+export async function lastWhatsapp(
+  userKey: SeedUserKey,
+  type: string,
+  contains?: string,
+): Promise<string | undefined> {
+  const rows = await getDeps().prisma.notification.findMany({
+    where: { userId: seedId('user', userKey), type },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    select: { whatsappText: true },
+  });
+  const needle = contains?.toLowerCase();
+  return rows.find((r) => !needle || r.whatsappText.toLowerCase().includes(needle))?.whatsappText;
+}
+
+/** How many notifications of a type a user has. */
+export async function countWhatsapp(userKey: SeedUserKey, type: string): Promise<number> {
+  return getDeps().prisma.notification.count({ where: { userId: seedId('user', userKey), type } });
+}

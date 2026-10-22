@@ -47,7 +47,7 @@ export async function approveBasket(
     if (
       basket.status !== 'draft' ||
       !basket.draftedAt ||
-      now.getTime() > basket.deadlineAt.getTime()
+      now.getTime() >= basket.deadlineAt.getTime()
     ) {
       throw conflict('BASKET_CLOSED', 'This basket can no longer be approved.');
     }

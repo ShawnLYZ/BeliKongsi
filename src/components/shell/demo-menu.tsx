@@ -2,23 +2,55 @@
 
 import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { FlaskConical, RotateCcw, X } from 'lucide-react';
+import { FastForward, FlaskConical, RotateCcw, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { apiFetch } from '@/components/common/api-client';
+import { ApiError, apiFetch } from '@/components/common/api-client';
+import { formatMyt } from '@/lib/format';
+
+const ACTION =
+  'focus-visible:ring-ring/60 inline-flex min-h-12 items-center justify-center gap-2 rounded-xl px-4 text-base font-semibold focus-visible:ring-3 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-60';
+const PRIMARY = `${ACTION} bg-primary text-primary-foreground hover:bg-primary-hover`;
+const SECONDARY = `${ACTION} border-input/50 bg-card hover:bg-muted border-2`;
 
 /**
  * Demo controls, shown only in demo mode. M2 has "Reset demo data"; M5 adds "Skip to cut-off"
- * and M7 "Complete other rounds".
+ * (after a confirmation) and M7 "Complete other rounds".
  */
 export function DemoMenu() {
   const dialog = useRef<HTMLDialogElement>(null);
   const router = useRouter();
-  const [resetting, setResetting] = useState(false);
+  const [busy, setBusy] = useState<'reset' | 'skip' | null>(null);
+  const [confirmingSkip, setConfirmingSkip] = useState(false);
+  const [skipError, setSkipError] = useState<string | null>(null);
+  const working = busy !== null;
 
   const close = () => dialog.current?.close();
 
+  async function skipToCutoff() {
+    setBusy('skip');
+    setSkipError(null);
+    try {
+      const r = await apiFetch<{ now: string; closed: number }>('/api/demo/skip-to-cutoff', {
+        method: 'POST',
+        quiet: true,
+      });
+      toast.success(
+        `Skipped to ${formatMyt(new Date(r.now))}. ${r.closed} ${r.closed === 1 ? 'round' : 'rounds'} closed.`,
+      );
+      close();
+      router.refresh();
+    } catch (error) {
+      setSkipError(
+        error instanceof ApiError ? error.message : 'Something went wrong. Please try again.',
+      );
+      setConfirmingSkip(false);
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function reset() {
-    setResetting(true);
+    setBusy('reset');
     try {
       await apiFetch('/api/demo/reset', { method: 'POST' });
       toast.success('Demo data reset. Everything is back to Monday morning.');
@@ -27,7 +59,7 @@ export function DemoMenu() {
     } catch {
       // apiFetch has already shown the error.
     } finally {
-      setResetting(false);
+      setBusy(null);
     }
   }
 
@@ -47,10 +79,14 @@ export function DemoMenu() {
         ref={dialog}
         aria-labelledby="demo-menu-title"
         onClick={(e) => {
-          if (e.target === dialog.current && !resetting) close();
+          if (e.target === dialog.current && !working) close();
+        }}
+        onClose={() => {
+          setConfirmingSkip(false);
+          setSkipError(null);
         }}
         onCancel={(e) => {
-          if (resetting) e.preventDefault();
+          if (working) e.preventDefault();
         }}
         className="bg-popover text-popover-foreground mx-auto mt-4 w-[calc(100%-2rem)] max-w-md rounded-2xl p-0 shadow-xl backdrop:bg-black/50 sm:mt-16"
       >
@@ -61,27 +97,88 @@ export function DemoMenu() {
           <button
             type="button"
             onClick={close}
-            disabled={resetting}
+            disabled={working}
             aria-label="Close"
             className="hover:bg-muted focus-visible:ring-ring/60 inline-flex size-11 items-center justify-center rounded-lg focus-visible:ring-3 focus-visible:outline-none disabled:opacity-60"
           >
             <X aria-hidden className="size-5" />
           </button>
         </div>
-        <div className="flex flex-col gap-3 p-4">
-          <p className="text-base">
-            Puts every made-up business, order and balance back to the start of the demo week
-            (Monday 6:05 am). Your changes are wiped. It takes a few seconds.
-          </p>
-          <button
-            type="button"
-            onClick={reset}
-            disabled={resetting}
-            className="bg-primary text-primary-foreground hover:bg-primary-hover focus-visible:ring-ring/60 inline-flex min-h-12 items-center justify-center gap-2 rounded-xl px-4 text-base font-semibold focus-visible:ring-3 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-60"
-          >
-            <RotateCcw aria-hidden className={resetting ? 'size-5 animate-spin' : 'size-5'} />
-            {resetting ? 'Resetting…' : 'Reset demo data'}
-          </button>
+        <div className="flex flex-col gap-5 p-4">
+          <section aria-labelledby="demo-skip-title" className="flex flex-col gap-3">
+            <h3 id="demo-skip-title" className="text-base font-semibold">
+              Skip to cut-off
+            </h3>
+            {confirmingSkip ? (
+              <>
+                <p className="text-base" id="demo-skip-confirm">
+                  Move demo time to one minute after the next cut-off? Every round due by then
+                  closes now: shops are refunded the difference or dropped, and the results are
+                  sent. Only &ldquo;Reset demo data&rdquo; undoes it.
+                </p>
+                <div className="flex flex-col gap-2">
+                  <button
+                    type="button"
+                    onClick={skipToCutoff}
+                    disabled={working}
+                    aria-describedby="demo-skip-confirm"
+                    className={PRIMARY}
+                  >
+                    <FastForward aria-hidden className="size-5" />
+                    {busy === 'skip' ? 'Closing rounds…' : 'Yes, skip to cut-off'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmingSkip(false)}
+                    disabled={working}
+                    className={SECONDARY}
+                  >
+                    Go back
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-base">
+                  Jumps demo time to just after the next round cut-off and closes the rounds that
+                  are due, so you can see the results and refunds straight away.
+                </p>
+                {skipError ? (
+                  <p role="alert" className="text-destructive text-base font-medium">
+                    {skipError}
+                  </p>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSkipError(null);
+                    setConfirmingSkip(true);
+                  }}
+                  disabled={working}
+                  className={SECONDARY}
+                >
+                  <FastForward aria-hidden className="size-5" />
+                  Skip to cut-off
+                </button>
+              </>
+            )}
+          </section>
+          <section aria-labelledby="demo-reset-title" className="flex flex-col gap-3 border-t pt-4">
+            <h3 id="demo-reset-title" className="text-base font-semibold">
+              Reset demo data
+            </h3>
+            <p className="text-base">
+              Puts every made-up business, order and balance back to the start of the demo week
+              (Monday 6:05 am). Your changes are wiped. It takes a few seconds.
+            </p>
+            <button type="button" onClick={reset} disabled={working} className={PRIMARY}>
+              <RotateCcw
+                aria-hidden
+                className={busy === 'reset' ? 'size-5 animate-spin' : 'size-5'}
+              />
+              {busy === 'reset' ? 'Resetting…' : 'Reset demo data'}
+            </button>
+          </section>
         </div>
       </dialog>
     </>

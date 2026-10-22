@@ -8,19 +8,17 @@ import type {
 import { tierForTotal } from '@/server/engine';
 import type { TierView } from '@/lib/views/catalogue';
 import type {
-  MyKongsiLineView,
   MyParticipationView,
   OpenRoundView,
   RoundDetailView,
   RoundProgressView,
+  RoundResultView,
   StaffOpenRoundView,
   StaffRoundDetailView,
 } from '@/lib/views/rounds';
 import type { Caller } from '@/server/platform/caller';
 import type { AppDeps } from '@/server/platform/deps';
-import { resolveClock } from '@/server/adapters/clock';
 import { AppError, forbidden, notFound } from '@/server/platform/errors';
-import { requireShopAccess } from '@/server/platform/permissions';
 import { UUID } from '@/server/platform/ids';
 import { activeTotals, priceForShop, roundTiers } from './quote';
 
@@ -161,35 +159,6 @@ function participationView(p: Participation): MyParticipationView {
   };
 }
 
-/**
- * "My Kongsi": the owner's own lines in rounds that are still open, newest first. Owners only;
- * staff get 403 (they see no money).
- */
-export async function listMyKongsiLines(
-  deps: AppDeps,
-  caller: Caller,
-  shopId: string,
-): Promise<MyKongsiLineView[]> {
-  requireShopAccess(caller, shopId, ['owner']);
-  const now = (await resolveClock(deps)).now();
-  const rows = await deps.prisma.participation.findMany({
-    where: { shopId, round: { status: 'open' } },
-    include: { round: { include: { product: true } } },
-    orderBy: [{ joinedAt: 'desc' }, { id: 'asc' }],
-  });
-  return rows.map((p) => ({
-    ...participationView(p),
-    roundId: p.roundId,
-    name: p.round.product.name,
-    shortName: p.round.product.shortName,
-    packDescription: p.round.product.packDescription,
-    unitName: p.round.product.unitName,
-    roundStatus: p.round.status,
-    cutoffAt: p.round.cutoffAt.toISOString(),
-    canCancel: p.status === 'active' && p.round.cutoffAt.getTime() > now.getTime(),
-  }));
-}
-
 export async function getRoundForCaller(
   deps: AppDeps,
   caller: Caller,
@@ -203,12 +172,14 @@ export async function getRoundForCaller(
   if (!round) throw notFound('Round');
 
   let nextRoundCutoffAt: string | null = null;
+  let nextRoundId: string | null = null;
   if (round.status !== 'open') {
     const next = await deps.prisma.round.findFirst({
       where: { productId: round.productId, status: 'open' },
       orderBy: { cutoffAt: 'asc' },
     });
     nextRoundCutoffAt = next ? next.cutoffAt.toISOString() : null;
+    nextRoundId = next?.id ?? null;
   }
   const base = {
     roundId: round.id,
@@ -222,6 +193,7 @@ export async function getRoundForCaller(
     status: round.status,
     cutoffAt: round.cutoffAt.toISOString(),
     nextRoundCutoffAt,
+    nextRoundId,
   };
   if (isStaff(caller)) return base;
 
@@ -243,5 +215,36 @@ export async function getRoundForCaller(
     buyAlonePriceSen: round.buyAlonePriceSen,
     progress: await roundProgress(deps.prisma, round.id),
     myParticipations,
+    result: await roundResult(deps.prisma, round),
+  };
+}
+
+/** The statuses of a line that went ahead at the close (kept, and what kept lines become later). */
+const KEPT_STATUSES = ['kept', 'allocated', 'shorted', 'received', 'closed'] as const;
+
+/** A formed round's close result; null while open, or when it closed empty or failed. */
+async function roundResult(
+  db: Pick<PrismaClient, 'participation'>,
+  round: Round,
+): Promise<RoundResultView | null> {
+  if (
+    round.finalTier === null ||
+    round.finalUnitPriceSen === null ||
+    round.totalKept === null ||
+    round.closedAt === null
+  ) {
+    return null;
+  }
+  const shops = await db.participation.findMany({
+    where: { roundId: round.id, status: { in: [...KEPT_STATUSES] } },
+    distinct: ['shopId'],
+    select: { shopId: true },
+  });
+  return {
+    finalTier: round.finalTier,
+    finalUnitPriceSen: round.finalUnitPriceSen,
+    totalKept: round.totalKept,
+    shopCount: shops.length,
+    closedAt: round.closedAt.toISOString(),
   };
 }

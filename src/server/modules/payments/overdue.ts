@@ -16,7 +16,7 @@ export async function voidOverduePayments(
 ): Promise<{ voided: number; failed: number }> {
   const now = (await resolveClock(deps)).now();
   const due = await deps.prisma.payment.findMany({
-    where: { status: 'pending', deadlineAt: { lt: now } },
+    where: { status: 'pending', deadlineAt: { lte: now } },
     select: { id: true },
     orderBy: { id: 'asc' },
   });
@@ -30,7 +30,7 @@ export async function voidOverduePayments(
         async (ctx) => {
           // voidPayment takes the locks (basket, shop, payment) and re-reads the payment under them.
           const p = await ctx.tx.payment.findUniqueOrThrow({ where: { id } });
-          if (p.status !== 'pending' || p.deadlineAt.getTime() >= ctx.now.getTime()) return false;
+          if (p.status !== 'pending' || p.deadlineAt.getTime() > ctx.now.getTime()) return false;
           await voidPayment(ctx, id, 'No payment result arrived before the deadline.');
           const after = await ctx.tx.payment.findUniqueOrThrow({ where: { id } });
           return after.status === 'voided';

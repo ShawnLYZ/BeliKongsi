@@ -79,6 +79,21 @@ export interface RoundDetailView {
   myParticipations: MyParticipationView[];
   /** When this round is no longer open: the cut-off of the product's next open round. */
   nextRoundCutoffAt: string | null;
+  /** That next open round, to link to. */
+  nextRoundId: string | null;
+  /** Once a round has formed: its final tier and price, and how much was kept by how many shops. */
+  result: RoundResultView | null;
+}
+
+export interface RoundResultView {
+  /** 1-based tier position. */
+  finalTier: number;
+  /** Goods price per unit at the final tier. */
+  finalUnitPriceSen: number;
+  totalKept: number;
+  /** Shops with kept lines. */
+  shopCount: number;
+  closedAt: string;
 }
 
 export interface StaffRoundDetailView {
@@ -93,17 +108,5 @@ export interface StaffRoundDetailView {
   status: string;
   cutoffAt: string;
   nextRoundCutoffAt: string | null;
-}
-
-/** One of the owner's own round lines on "My Kongsi". */
-export interface MyKongsiLineView extends MyParticipationView {
-  roundId: string;
-  name: string;
-  shortName: string;
-  packDescription: string;
-  unitName: string;
-  roundStatus: string;
-  cutoffAt: string;
-  /** Active, in an open round, before its cut-off: the owner may cancel it for a full refund. */
-  canCancel: boolean;
+  nextRoundId: string | null;
 }

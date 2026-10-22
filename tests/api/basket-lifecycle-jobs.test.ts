@@ -132,10 +132,12 @@ describe('basket lifecycle', () => {
     expect(approved.body.status).toBe('pending');
     const postings = await app.prisma.ledgerPosting.count();
 
-    app.clock.set('2026-11-05T11:59:00Z');
+    // The deadline is the cut-off, 12:00: still open a second before, expired exactly at it (as
+    // payments are voided at their deadline and rounds close at their cut-off).
+    app.clock.set('2026-11-05T11:59:59Z');
     expect((await expireBaskets(app.deps)).expired).toBe(0);
 
-    app.clock.set('2026-11-05T12:00:01Z');
+    app.clock.set('2026-11-05T12:00:00Z');
     expect((await expireBaskets(app.deps)).expired).toBe(1);
     const basket = await app.prisma.weeklyBasket.findUniqueOrThrow({ where: { id: basketId } });
     expect(basket.status).toBe('expired');
@@ -153,6 +155,19 @@ describe('basket lifecycle', () => {
     expect(await app.prisma.ledgerPosting.count()).toBe(postings);
     expect(await logCount('payment.voided')).toBe(1);
     expect(await logCount('basket.expired')).toBe(1);
+  });
+
+  it('refuses to approve a basket exactly at its deadline', async () => {
+    app.clock.set('2026-11-05T11:59:59Z');
+    expect(
+      (await app.prisma.weeklyBasket.findUniqueOrThrow({ where: { id: basketId } })).deadlineAt,
+    ).toEqual(new Date('2026-11-05T12:00:00Z'));
+    app.clock.set('2026-11-05T12:00:00Z');
+    const res = await ah.post(`/api/baskets/${basketId}/approve`, undefined, {
+      'idempotency-key': 'k-deadline',
+    });
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('BASKET_CLOSED');
   });
 
   it('leaves a paid basket alone at cut-off', async () => {
@@ -185,6 +200,8 @@ describe('jobs runner', () => {
         draftedBaskets: 0,
         reminders: 0,
         voidedPayments: 0,
+        closedRounds: 0,
+        failedRounds: 0,
         expiredBaskets: 0,
       });
     }
@@ -197,11 +214,14 @@ describe('jobs runner', () => {
     app.clock.set('2026-11-05T12:00:01Z');
     const second = await runDueJobs(app.deps);
     expect(second.expiredBaskets).toBe(1);
+    expect(second.closedRounds).toBe(12);
     expect(await runDueJobs(app.deps)).toEqual({
       openedRounds: 0,
       draftedBaskets: 0,
       reminders: 0,
       voidedPayments: 0,
+      closedRounds: 0,
+      failedRounds: 0,
       expiredBaskets: 0,
     });
   });

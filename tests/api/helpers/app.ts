@@ -119,6 +119,7 @@ export class Client {
 export interface TestApp {
   deps: AppDeps;
   prisma: PrismaClient;
+  appUrl: string;
   clock: MutableClock;
   as(user: SeedUserKey): Promise<Client>;
   anonymous(): Client;
@@ -143,6 +144,7 @@ export async function createTestApp(
   return {
     deps: t.deps,
     prisma: t.deps.prisma,
+    appUrl: t.db.appUrl,
     clock: t.clock,
     async as(user) {
       // Each signed-in client gets its own address so sign-in rate limits do not couple tests.

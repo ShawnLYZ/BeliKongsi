@@ -8,7 +8,8 @@ import { conflict, notFound } from '@/server/platform/errors';
 import { UUID } from '@/server/platform/ids';
 import { requireShopAccess } from '@/server/platform/permissions';
 import { withTransaction } from '@/server/platform/tx';
-import { lockShop, reconcileDeliveryFee } from './fee';
+import { refundDeliveryFeeIfUnused } from './delivery-fees';
+import { lockRounds, lockShop } from './fee';
 
 /**
  * An owner cancels a line before the round's cut-off (story 57). The whole amount paid goes back
@@ -23,13 +24,16 @@ export async function cancelParticipation(
   if (!UUID.test(participationId)) throw notFound('Participation');
   return withTransaction(deps, caller, async (ctx) => {
     const { tx, now } = ctx;
-    // Lock the shop first, as createPayment and settlement do, so a cancel and a payment for the
-    // same shop run one after another and lock ledger accounts in the same order.
+    // The payments lock order (see lockRounds): the line's round first (it never changes, so it
+    // is read before any lock), so a close in flight finishes first; then the shop, as
+    // createPayment and settlement do, so a cancel and a payment for the same shop run one after
+    // another and lock ledger accounts in the same order; then the line.
     const owner = await tx.participation.findUnique({
       where: { id: participationId },
-      select: { shopId: true },
+      select: { shopId: true, roundId: true },
     });
     if (!owner) throw notFound('Participation');
+    await lockRounds(ctx, [owner.roundId]);
     await lockShop(ctx, owner.shopId);
     const locked = await tx.$queryRaw<{ id: string }[]>`
       SELECT id FROM participations WHERE id = ${participationId}::uuid FOR UPDATE`;
@@ -66,11 +70,11 @@ export async function cancelParticipation(
       },
     });
 
-    // The delivery fee goes back when nothing needs it any more (active door line or pending
-    // door payment for that date).
+    // The delivery fee goes back when nothing needs it any more (a door line heading for that
+    // date or a pending door payment for it).
     const deliveryFeeRefundSen =
       part.destinationType === 'door'
-        ? await reconcileDeliveryFee(ctx, shopId, part.deliveryDate)
+        ? await refundDeliveryFeeIfUnused(ctx, shopId, part.deliveryDate)
         : 0;
 
     const scope = { shopId };

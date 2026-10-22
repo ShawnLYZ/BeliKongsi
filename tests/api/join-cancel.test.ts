@@ -9,7 +9,6 @@ import { cancelParticipation } from '@/server/modules/payments/cancel';
 import { createPayment } from '@/server/modules/payments/create';
 import { joinRound } from '@/server/modules/payments/join';
 import { openDueRounds } from '@/server/modules/rounds/open';
-import { listMyKongsiLines } from '@/server/modules/rounds/read';
 import { personCaller, systemCaller } from '@/server/platform/caller';
 import { withTransaction } from '@/server/platform/tx';
 import { createTestApp, type Client, type TestApp } from './helpers/app';
@@ -265,26 +264,30 @@ describe('cancelling before cut-off', () => {
   });
 
   it('lists the owner’s lines on My Kongsi, cancellable until cut-off', async () => {
-    const owner = personCaller(session('ahSeng', 'owner', { shopId: KEDAI }, 'shop'));
-    const lines = await listMyKongsiLines(app.deps, owner, KEDAI);
+    const mine = async (status: 'active' | 'history') => {
+      const res = await ah.get(`/api/shops/${KEDAI}/participations?status=${status}`);
+      expect(res.status).toBe(200);
+      return res.body.items as { participationId: string; status: string }[];
+    };
+    const lines = await mine('active');
     expect(lines).toHaveLength(5);
-    expect(lines.find((l) => l.id === cmPart)).toMatchObject({
-      name: expect.stringContaining('condensed milk'),
+    expect(lines.find((l) => l.participationId === cmPart)).toMatchObject({
+      productName: expect.stringContaining('condensed milk'),
       quantity: 6,
       paidSen: 98454,
       status: 'active',
-      canCancel: true,
     });
     await ah.post(`/api/participations/${cmPart}/cancel`);
-    const after = await listMyKongsiLines(app.deps, owner, KEDAI);
-    expect(after.find((l) => l.id === cmPart)).toMatchObject({
+    // A cancelled line leaves the active lines for the history, with its full refund.
+    expect((await mine('active')).map((l) => l.participationId)).not.toContain(cmPart);
+    expect((await mine('history')).find((l) => l.participationId === cmPart)).toMatchObject({
       status: 'cancelled',
-      canCancel: false,
+      refundSen: 98454,
     });
-    app.clock.set('2026-11-05T12:00:01Z');
-    expect((await listMyKongsiLines(app.deps, owner, KEDAI)).some((l) => l.canCancel)).toBe(false);
-    const staff = personCaller(session('rahim', 'staff', { shopId: KEDAI }, 'shop'));
-    await expect(listMyKongsiLines(app.deps, staff, KEDAI)).rejects.toMatchObject({ status: 403 });
+    // (After the cut-off no line can be cancelled: see 'refuses to cancel after cut-off'.)
+    // Staff see no money, so not the lines either.
+    const rahim = await app.as('rahim');
+    expect((await rahim.get(`/api/shops/${KEDAI}/participations?status=active`)).status).toBe(403);
   });
 
   it('cannot cancel twice', async () => {

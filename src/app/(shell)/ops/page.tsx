@@ -1,3 +1,5 @@
+import Link from 'next/link';
+import { BUTTON_SECONDARY } from '@/components/common/controls';
 import { EmptyState } from '@/components/common/empty-state';
 import { getDeps } from '@/server/platform/deps';
 import { scheduleDueWork } from '@/server/platform/due-work';
@@ -10,6 +12,11 @@ export default async function OpsHomePage() {
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-2xl font-bold">Operations</h1>
+      <nav aria-label="Ops pages" className="flex flex-wrap gap-2">
+        <Link href="/ops/events" className={BUTTON_SECONDARY}>
+          Integration events
+        </Link>
+      </nav>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <EmptyState
           title="Rounds board"

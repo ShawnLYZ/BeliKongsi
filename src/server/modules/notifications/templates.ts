@@ -1,5 +1,5 @@
 import type { Role } from '@/generated/prisma/client';
-import { formatMytShort, formatRM, formatUnits } from '@/lib/format';
+import { formatMytDate, formatMytShort, formatRM, formatUnits } from '@/lib/format';
 
 export type NotificationMessage = { title: string; body: string; whatsappText: string };
 
@@ -18,6 +18,8 @@ export function defineTemplates<T extends { [type: string]: TemplateBuilder<neve
 
 // Later milestones add their PRD section 13 entries, keyed by notification type, with
 // `defineTemplates({ type: (data: Data) => (role) => ({ ... }) })`.
+const cap = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
 export const TEMPLATES = defineTemplates({
   // Owner only: staff are never told amounts, so this is not sent to them.
   'basket.ready': (data: {
@@ -75,5 +77,51 @@ export const TEMPLATES = defineTemplates({
         ? `Payment failed (simulated). You haven't joined the ${data.shortName} Kongsi. Tap to try again.`
         : 'Payment failed (simulated). Your basket is unchanged. Tap to try again.';
     return () => ({ title: 'Payment failed', body: text, whatsappText: text });
+  },
+  // Owner only: the round closed and the shop's lines were kept (refund omitted when 0).
+  'round.kept': (data: {
+    shortName: string;
+    unitName: string;
+    finalUnitPriceSen: number;
+    totalKept: number;
+    shopCount: number;
+    refundSen: number;
+    readyAt: Date | null;
+  }) => {
+    const text =
+      `${cap(data.shortName)} closed at ${formatRM(data.finalUnitPriceSen)} a ${data.unitName} ` +
+      `(${formatUnits(data.totalKept, data.unitName)}, ${formatUnits(data.shopCount, 'shop')}).` +
+      (data.refundSen > 0 ? ` ${formatRM(data.refundSen)} is back in your balance.` : '') +
+      (data.readyAt ? ` Ready ${formatMytDate(data.readyAt)}.` : '');
+    return () => ({ title: 'Your round closed', body: text, whatsappText: text });
+  },
+  // Owner only: the final all-in price went above the shop's limit, so the lines were refunded.
+  'round.dropped': (data: {
+    shortName: string;
+    allInSen: number;
+    limitSen: number;
+    refundSen: number;
+  }) => {
+    const text = `${cap(data.shortName)} closed at ${formatRM(data.allInSen)} all-in, above your limit of ${formatRM(data.limitSen)}. Full refund: ${formatRM(data.refundSen)}.`;
+    return () => ({ title: 'Dropped: over your limit', body: text, whatsappText: text });
+  },
+  // Owner only: the round did not reach its first tier. The next-round sentence is left out
+  // when the product has no next round.
+  'round.failed': (data: {
+    shortName: string;
+    unitName: string;
+    minQuantity: number;
+    refundSen: number;
+    nextCutoff: Date | null;
+  }) => {
+    const text =
+      `${cap(data.shortName)} didn't reach ${formatUnits(data.minQuantity, data.unitName)}. Full refund: ${formatRM(data.refundSen)}.` +
+      (data.nextCutoff ? ` Next round closes ${formatMytDate(data.nextCutoff)}.` : '');
+    return () => ({ title: "Round didn't form", body: text, whatsappText: text });
+  },
+  // Ops only: a supplier order is drafted and waits for approval. shortName stays lowercase.
+  'ops.approval_needed': (data: { shortName: string; totalSen: number }) => {
+    const text = `Supplier order awaiting approval: ${data.shortName}, ${formatRM(data.totalSen)}.`;
+    return () => ({ title: 'Supplier order awaiting approval', body: text, whatsappText: text });
   },
 });

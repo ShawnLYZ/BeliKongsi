@@ -182,15 +182,16 @@ export async function expireBasketIn(ctx: TxContext, basket: WeeklyBasket): Prom
 }
 
 /**
- * Draft and payment-pending baskets past their deadline expire. A pending payment is voided
- * through the payments module (so it is logged and its fees reconciled); nothing is charged.
- * Each basket has its own transaction; one that fails is logged and counted in `failed`, and the
- * rest still expire.
+ * Draft and payment-pending baskets expire at their deadline (the earliest cut-off), as payments
+ * are voided at theirs and rounds close at theirs. A pending payment is voided through the
+ * payments module (so it is logged and its fees reconciled); nothing is charged. Each basket has
+ * its own transaction; one that fails is logged and counted in `failed`, and the rest still
+ * expire.
  */
 export async function expireBaskets(deps: AppDeps): Promise<{ expired: number; failed: number }> {
   const now = (await resolveClock(deps)).now();
   const due = await deps.prisma.weeklyBasket.findMany({
-    where: { status: { in: ['draft', 'payment_pending'] }, deadlineAt: { lt: now } },
+    where: { status: { in: ['draft', 'payment_pending'] }, deadlineAt: { lte: now } },
     select: { id: true },
     orderBy: { id: 'asc' },
   });
@@ -199,12 +200,13 @@ export async function expireBaskets(deps: AppDeps): Promise<{ expired: number; f
   for (const { id } of due) {
     try {
       const done = await withTransaction(deps, systemCaller('expire baskets'), async (ctx) => {
-        // Lock order matches the payments module (lockPayment): basket, then shop, then payment.
+        // The basket first; voidPayment then share-locks the payment's rounds, the shop and the
+        // payment. Only a close takes a round for update, and a close never waits for a basket.
         await ctx.tx.$queryRaw`SELECT id FROM weekly_baskets WHERE id = ${id}::uuid FOR UPDATE`;
         const basket = await ctx.tx.weeklyBasket.findUniqueOrThrow({ where: { id } });
         if (
           (basket.status !== 'draft' && basket.status !== 'payment_pending') ||
-          basket.deadlineAt.getTime() >= ctx.now.getTime()
+          basket.deadlineAt.getTime() > ctx.now.getTime()
         ) {
           return false;
         }

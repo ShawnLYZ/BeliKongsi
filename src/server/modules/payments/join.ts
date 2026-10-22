@@ -8,7 +8,7 @@ import { requireShopAccess } from '@/server/platform/permissions';
 import { withTransaction } from '@/server/platform/tx';
 import { failPayment } from './complete';
 import { createPayment, type PaymentSummary } from './create';
-import { lockShop } from './fee';
+import { lockRounds, lockShop } from './fee';
 
 export type JoinInput = {
   quantity: number;
@@ -53,6 +53,8 @@ export async function joinRound(
 
   return withTransaction(deps, caller, async (ctx) => {
     const { tx, now } = ctx;
+    // The round before the shop (see lockRounds), so a close in flight finishes first.
+    await lockRounds(ctx, [roundId]);
     const round = await tx.round.findUnique({ where: { id: roundId } });
     if (!round) throw notFound('Round');
     if (round.status !== 'open' || round.cutoffAt.getTime() <= now.getTime()) {
@@ -71,7 +73,7 @@ export async function joinRound(
       });
       destination = defaultDestination(shop, points);
     }
-    // The shop lock first (the payments lock order), so two taps supersede one after another.
+    // Then the shop (the payments lock order), so two taps supersede one after another.
     await lockShop(ctx, joiningShopId);
     const earlier = await tx.payment.findMany({
       where: {

@@ -25,3 +25,11 @@ const STATUS_LABELS: Record<string, string> = {
 export function statusWords(code: string): string {
   return STATUS_LABELS[code] ?? code.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
 }
+
+/** R11: a round past its cut-off that the close job hasn't reached yet. */
+export const CLOSING_TEXT = 'Closing…';
+
+/** True when an open round's cut-off has passed by the app's clock (not the device's). */
+export function isClosing(cutoffAt: string, serverNow: string): boolean {
+  return Date.parse(serverNow) >= Date.parse(cutoffAt);
+}

@@ -32,8 +32,10 @@ export type SimulatedResult = { outcome: 'succeeded' | 'failed'; method: 'duitno
 
 /**
  * The simulated checkout's answer for a pending payment, for the owner of the payment's shop. A
- * payment that is no longer pending is returned unchanged. A result after the deadline voids the
- * payment: the void is committed first, then the call answers 409 PAYMENT_VOIDED.
+ * payment that is no longer pending is returned unchanged. A result at or after the deadline (a
+ * join's deadline is its round's cut-off, the instant the round closes) voids the payment, as does
+ * a success for a round that has already closed: the void is committed first, then the call
+ * answers 409 PAYMENT_VOIDED.
  */
 export async function simulatePaymentResult(
   deps: AppDeps,
@@ -50,16 +52,16 @@ export async function simulatePaymentResult(
     requireShopAccess(caller, found.shopId, ['owner']);
     const p = await lockPayment(ctx, paymentId);
     if (p.status !== 'pending') return { voided: false, view: paymentView(p) };
-    if (ctx.now.getTime() > p.deadlineAt.getTime()) {
+    if (ctx.now.getTime() >= p.deadlineAt.getTime()) {
       await voidPayment(ctx, p.id);
       return { voided: true, view: null };
     }
     if (result.outcome === 'succeeded') await completePaymentSuccess(ctx, p.id, result.method);
     else await failPayment(ctx, p.id);
-    return {
-      voided: false,
-      view: paymentView(await ctx.tx.payment.findUniqueOrThrow({ where: { id: p.id } })),
-    };
+    const after = await ctx.tx.payment.findUniqueOrThrow({ where: { id: p.id } });
+    // settlePayment voids a payment whose round closed before the money arrived.
+    if (after.status === 'voided') return { voided: true, view: null };
+    return { voided: false, view: paymentView(after) };
   });
   // Thrown after the transaction so the void stays committed.
   if (outcome.voided || !outcome.view) {

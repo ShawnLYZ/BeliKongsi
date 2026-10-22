@@ -5,14 +5,30 @@ import type { AccountRef } from '@/server/modules/ledger/accounts';
 import { post } from '@/server/modules/ledger/post';
 import { notify, TEMPLATES } from '@/server/modules/notifications/notify';
 import { notFound } from '@/server/platform/errors';
-import { lockShop, reconcilePaymentFees } from './fee';
+import { reconcilePaymentFees } from './delivery-fees';
+import { lockRounds, lockShop } from './fee';
 import { UUID } from '@/server/platform/ids';
 import type { TxContext } from '@/server/platform/tx';
 
 /**
+ * Share-locks the rounds of a payment's lines (see `lockRounds`). A line's round never changes, so
+ * the ids are read before any lock is held.
+ */
+async function lockPaymentRounds(ctx: TxContext, paymentId: string) {
+  const lines = await ctx.tx.paymentLine.findMany({
+    where: { paymentId },
+    select: { roundId: true },
+  });
+  return lockRounds(
+    ctx,
+    lines.map((l) => l.roundId),
+  );
+}
+
+/**
  * Locks the payment row for the rest of the transaction, so two results cannot both apply. Lock
- * order, shared with approve, expiry, create and cancel: the basket row (when the payment has
- * one), then the shop, then the payment.
+ * order (see `lockRounds`): the payment's rounds (shared), the basket row (when the payment has
+ * one), the shop, then the payment.
  */
 export async function lockPayment(ctx: TxContext, paymentId: string): Promise<Payment> {
   if (!UUID.test(paymentId)) throw notFound('Payment');
@@ -21,6 +37,7 @@ export async function lockPayment(ctx: TxContext, paymentId: string): Promise<Pa
     select: { shopId: true, basketId: true },
   });
   if (!owner) throw notFound('Payment');
+  await lockPaymentRounds(ctx, paymentId);
   if (owner.basketId) {
     await ctx.tx.$queryRaw`
       SELECT id FROM weekly_baskets WHERE id = ${owner.basketId}::uuid FOR UPDATE`;
@@ -75,7 +92,9 @@ async function payInto(
 /**
  * Completes a pending payment: the shop joins every line's round, the money moves into the round
  * holds and the delivery fee hold (balance first, line by line in round order, then the fees),
- * and a basket becomes paid. A payment that is no longer pending is left alone.
+ * and a basket becomes paid. A payment that is no longer pending is left alone. A payment with a
+ * line in a round that is no longer open, or whose cut-off has come, is voided instead: no money
+ * goes into a closed round's hold.
  */
 export async function settlePayment(
   ctx: TxContext,
@@ -86,6 +105,14 @@ export async function settlePayment(
   const { tx, now } = ctx;
   const p = await lockPayment(ctx, paymentId);
   if (p.status !== 'pending') return;
+
+  // lockPayment share-locked the rounds before the shop, so a close in flight has finished and its
+  // status is seen here, or it waits until this payment has joined.
+  const rounds = await lockPaymentRounds(ctx, p.id);
+  if (rounds.some((r) => r.status !== 'open' || r.cutoffAt.getTime() <= now.getTime())) {
+    await voidPayment(ctx, p.id, 'The round closed before the payment arrived.');
+    return;
+  }
 
   await tx.payment.update({
     where: { id: p.id },
