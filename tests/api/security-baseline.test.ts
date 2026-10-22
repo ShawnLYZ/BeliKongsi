@@ -82,7 +82,8 @@ describe('security baseline', () => {
     await withDb(async ({ adminUrl }) => {
       await exec(
         adminUrl,
-        `create table activity_log_entries (seq bigint primary key);
+        `drop table activity_log_entries, ledger_postings;
+         create table activity_log_entries (seq bigint primary key);
          create table ledger_postings (id int primary key);
          select bk_secure_all_tables();`,
       );

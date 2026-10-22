@@ -9,8 +9,6 @@ export interface TestDatabase {
   drop(): Promise<void>;
 }
 
-const CLONE_LOCK = 424242;
-
 export async function createTestDatabase(): Promise<TestDatabase> {
   const base = inject('pgAdminBase');
   const credentials = inject('pgAppCredentials');
@@ -19,13 +17,11 @@ export async function createTestDatabase(): Promise<TestDatabase> {
   const admin = new Client({ connectionString: `${base}/postgres` });
   await admin.connect();
   try {
-    // CREATE DATABASE ... TEMPLATE needs exclusive use of the template, so clones queue up.
-    await admin.query('select pg_advisory_lock($1)', [CLONE_LOCK]);
-    try {
-      await admin.query(`CREATE DATABASE "${name}" TEMPLATE bk_template`);
-    } finally {
-      await admin.query('select pg_advisory_unlock($1)', [CLONE_LOCK]);
-    }
+    // Clones run concurrently. CREATE DATABASE ... TEMPLATE only fails when a session is connected
+    // *to* the template (global setup closes those and nothing reconnects); concurrent clones take
+    // a shared lock on it. Serialising them made every test file queue behind every other file's
+    // clones (~1 s each on Windows), which pushed two-clone tests past their timeout.
+    await admin.query(`CREATE DATABASE "${name}" TEMPLATE bk_template`);
   } finally {
     await admin.end();
   }

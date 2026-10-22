@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { Client } from 'pg';
 import type { TestProject } from 'vitest/node';
-import { startCluster, type Cluster } from '../../scripts/lib/embedded-pg';
+import { createUtf8DatabaseSql, startCluster, type Cluster } from '../../scripts/lib/embedded-pg';
 
 declare module 'vitest' {
   export interface ProvidedContext {
@@ -54,16 +54,19 @@ async function ensureTemplate(adminUrl: (db?: string) => string): Promise<void> 
   const files = listMigrationFiles();
   const hash = hashMigrations(files);
   const current = await withClient(adminUrl('postgres'), async (c) => {
-    const r = await c.query<{ comment: string | null }>(
-      `select shobj_description(oid, 'pg_database') as comment from pg_database where datname = 'bk_template'`,
+    const r = await c.query<{ comment: string | null; encoding: string }>(
+      `select shobj_description(oid, 'pg_database') as comment, pg_encoding_to_char(encoding) as encoding from pg_database where datname = 'bk_template'`,
     );
-    return r.rows[0] ? (r.rows[0].comment ?? '') : null;
+    const row = r.rows[0];
+    if (!row) return null;
+    // A template built in another encoding (older Windows clusters) is rebuilt as UTF-8.
+    return row.encoding === 'UTF8' ? (row.comment ?? '') : null;
   });
 
   if (current !== hash) {
     await withClient(adminUrl('postgres'), async (c) => {
       await c.query('DROP DATABASE IF EXISTS bk_template WITH (FORCE)');
-      await c.query('CREATE DATABASE bk_template');
+      await c.query(createUtf8DatabaseSql('bk_template'));
     });
     // Before the baseline migration exists there is nothing to deploy.
     if (files.length > 0) {

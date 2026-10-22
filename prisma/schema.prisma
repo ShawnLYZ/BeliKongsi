@@ -6,3 +6,920 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+enum ShopType {
+  kopitiam
+  hawker
+  cafe
+  restaurant
+  bakery
+}
+
+enum Fulfilment {
+  pickup
+  door
+}
+
+enum OrgType {
+  shop
+  supplier
+  operator
+}
+
+enum Role {
+  owner
+  staff
+  supplier
+  ops
+}
+
+enum SignInProvider {
+  microsoft
+  google
+}
+
+enum SupplierStatus {
+  active
+  paused
+}
+
+enum ProductCategory {
+  dairy
+  oil
+  flour
+  beverages
+  eggs
+  packaging
+}
+
+enum UnitName {
+  carton
+  tin
+  tray
+  sack
+  pack
+}
+
+enum Cadence {
+  weekly
+  fortnightly
+  monthly
+}
+
+enum RoundStatus {
+  scheduled
+  open
+  empty
+  failed
+  formed
+  ordered
+  confirmed
+  dispatched
+  at_hub
+  completed
+  cancelled
+}
+
+enum BasketStatus {
+  draft
+  payment_pending
+  paid
+  skipped
+  expired
+}
+
+enum LineSource {
+  usual_list
+  staff
+  owner
+}
+
+enum ParticipationSource {
+  weekly_basket
+  catalogue
+  background_seed
+}
+
+enum ParticipationStatus {
+  active
+  cancelled
+  dropped_price_limit
+  refunded_failed
+  kept
+  refunded_round_cancelled
+  allocated
+  shorted
+  received
+  closed
+}
+
+enum BaselineKind {
+  usual
+  buy_alone
+}
+
+enum PaymentPurpose {
+  basket
+  join
+}
+
+enum PaymentMethod {
+  duitnow_qr
+  fpx
+  balance_only
+}
+
+enum PaymentStatus {
+  pending
+  succeeded
+  failed
+  voided
+}
+
+enum DeliveryFeeStatus {
+  held
+  passed_to_partner
+  refunded
+}
+
+enum AccountKind {
+  shop_balance
+  round_hold
+  delivery_fee_hold
+  supplier_payable
+  fee_revenue
+  logistics_payable
+  claims_expense
+  partner_cash
+}
+
+enum PostingKind {
+  payment_in
+  balance_applied
+  delivery_fee_in
+  refund_cancelled
+  refund_difference
+  refund_dropped
+  refund_failed
+  refund_round_cancelled
+  refund_shortfall
+  refund_delivery_fee
+  settlement_supplier
+  settlement_fee
+  settlement_logistics
+  supplier_payout
+  delivery_fee_to_partner
+  refund_claim
+}
+
+enum SupplierOrderStatus {
+  awaiting_ops
+  awaiting_supplier
+  confirmed
+  dispatched
+  settled
+  rejected_by_ops
+  rejected_by_supplier
+}
+
+enum DestinationType {
+  pickup_point
+  door
+}
+
+enum ConsignmentStatus {
+  planned
+  dispatched
+  arrived
+  out_for_delivery
+  delivered
+  completed
+}
+
+enum PickupStatus {
+  waiting
+  ready
+  out_for_delivery
+  collected
+  delivered
+  checked
+  closed
+}
+
+enum CheckResult {
+  all_received
+  issues
+}
+
+enum ClaimStatus {
+  submitted
+  approved
+  rejected
+}
+
+enum ApprovalType {
+  weekly_basket
+  supplier_order
+  supplier_confirmation
+  claim
+}
+
+enum ApprovalStatus {
+  pending
+  approved
+  rejected
+  expired
+}
+
+enum ActorType {
+  person
+  system
+  ai
+}
+
+enum AiRunKind {
+  usual_list_text
+}
+
+enum AiRunStatus {
+  succeeded
+  failed
+  saved_example
+}
+
+model Operator {
+  id          String       @id @default(uuid()) @db.Uuid
+  name        String
+  memberships Membership[]
+
+  @@map("operators")
+}
+
+model Hub {
+  id        String          @id @default(uuid()) @db.Uuid
+  name      String
+  region    String
+  address   String
+  lat       Float
+  lng       Float
+  suppliers Supplier[]
+  rounds    Round[]
+  orders    SupplierOrder[]
+
+  @@map("hubs")
+}
+
+model PickupPoint {
+  id           String  @id @default(uuid()) @db.Uuid
+  name         String
+  address      String
+  state        String
+  lat          Float
+  lng          Float
+  openingHours String  @map("opening_hours")
+  active       Boolean
+  shops        Shop[]
+
+  @@map("pickup_points")
+}
+
+model Shop {
+  id                   String          @id @default(uuid()) @db.Uuid
+  name                 String
+  type                 ShopType
+  address              String
+  state                String
+  postcode             String
+  lat                  Float
+  lng                  Float
+  defaultFulfilment    Fulfilment      @map("default_fulfilment")
+  defaultPickupPointId String?         @map("default_pickup_point_id") @db.Uuid
+  defaultPickupPoint   PickupPoint?    @relation(fields: [defaultPickupPointId], references: [id])
+  isBackground         Boolean         @map("is_background")
+  setupCompletedAt     DateTime?       @map("setup_completed_at") @db.Timestamptz
+  createdAt            DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  memberships          Membership[]
+  usualList            UsualList?
+  baskets              WeeklyBasket[]
+  payments             Payment[]
+  participations       Participation[]
+
+  @@map("shops")
+}
+
+model Supplier {
+  id           String            @id @default(uuid()) @db.Uuid
+  name         String
+  categories   ProductCategory[]
+  region       String
+  hubId        String            @map("hub_id") @db.Uuid
+  hub          Hub               @relation(fields: [hubId], references: [id])
+  contactName  String            @map("contact_name")
+  contactPhone String            @map("contact_phone")
+  status       SupplierStatus
+  memberships  Membership[]
+  products     Product[]
+  rounds       Round[]
+  orders       SupplierOrder[]
+
+  @@map("suppliers")
+}
+
+model User {
+  id             String          @id @default(uuid()) @db.Uuid
+  displayName    String          @map("display_name")
+  email          String?
+  phone          String?
+  signInProvider SignInProvider? @map("sign_in_provider")
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  memberships    Membership[]
+
+  @@map("users")
+}
+
+model Membership {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  user       User      @relation(fields: [userId], references: [id])
+  orgType    OrgType   @map("org_type")
+  shopId     String?   @map("shop_id") @db.Uuid
+  shop       Shop?     @relation(fields: [shopId], references: [id])
+  supplierId String?   @map("supplier_id") @db.Uuid
+  supplier   Supplier? @relation(fields: [supplierId], references: [id])
+  operatorId String?   @map("operator_id") @db.Uuid
+  operator   Operator? @relation(fields: [operatorId], references: [id])
+  role       Role
+  endedAt    DateTime? @map("ended_at") @db.Timestamptz
+
+  @@index([userId])
+  @@map("memberships")
+}
+
+model Product {
+  id                 String          @id @default(uuid()) @db.Uuid
+  supplierId         String          @map("supplier_id") @db.Uuid
+  supplier           Supplier        @relation(fields: [supplierId], references: [id])
+  name               String
+  shortName          String          @map("short_name")
+  category           ProductCategory
+  packDescription    String          @map("pack_description")
+  unitName           UnitName        @map("unit_name")
+  unitWeightGrams    Int             @map("unit_weight_grams")
+  buyAlonePriceSen   Int             @map("buy_alone_price_sen")
+  aliases            String[]
+  packConversions    Json            @map("pack_conversions")
+  imageKey           String?         @map("image_key")
+  imageAiGenerated   Boolean         @map("image_ai_generated")
+  cadence            Cadence
+  scheduleAnchorWeek String          @map("schedule_anchor_week")
+  cutoffWeekday      Int             @default(4) @map("cutoff_weekday")
+  cutoffTime         String          @default("20:00") @map("cutoff_time")
+  active             Boolean
+  tiers              PriceTier[]
+  rounds             Round[]
+  usualListItems     UsualListItem[]
+
+  @@map("products")
+}
+
+model PriceTier {
+  id           String  @id @default(uuid()) @db.Uuid
+  productId    String  @map("product_id") @db.Uuid
+  product      Product @relation(fields: [productId], references: [id])
+  position     Int
+  minQuantity  Int     @map("min_quantity")
+  unitPriceSen Int     @map("unit_price_sen")
+
+  @@unique([productId, position])
+  @@map("price_tiers")
+}
+
+model Round {
+  id                String          @id @default(uuid()) @db.Uuid
+  productId         String          @map("product_id") @db.Uuid
+  product           Product         @relation(fields: [productId], references: [id])
+  supplierId        String          @map("supplier_id") @db.Uuid
+  supplier          Supplier        @relation(fields: [supplierId], references: [id])
+  hubId             String          @map("hub_id") @db.Uuid
+  hub               Hub             @relation(fields: [hubId], references: [id])
+  cycleLabel        String          @map("cycle_label")
+  opensAt           DateTime        @map("opens_at") @db.Timestamptz
+  cutoffAt          DateTime        @map("cutoff_at") @db.Timestamptz
+  expectedReadyAt   DateTime        @map("expected_ready_at") @db.Timestamptz
+  tiersSnapshot     Json            @map("tiers_snapshot")
+  feeBps            Int             @map("fee_bps")
+  buyAlonePriceSen  Int             @map("buy_alone_price_sen")
+  unitWeightGrams   Int             @map("unit_weight_grams")
+  status            RoundStatus
+  finalTier         Int?            @map("final_tier")
+  finalUnitPriceSen Int?            @map("final_unit_price_sen")
+  totalAtCutoff     Int?            @map("total_at_cutoff")
+  totalKept         Int?            @map("total_kept")
+  closeIterations   Int?            @map("close_iterations")
+  closedAt          DateTime?       @map("closed_at") @db.Timestamptz
+  participations    Participation[]
+  supplierOrder     SupplierOrder?
+
+  @@map("rounds")
+}
+
+model UsualList {
+  id          String          @id @default(uuid()) @db.Uuid
+  shopId      String          @unique @map("shop_id") @db.Uuid
+  shop        Shop            @relation(fields: [shopId], references: [id])
+  confirmedAt DateTime        @map("confirmed_at") @db.Timestamptz
+  updatedAt   DateTime        @map("updated_at") @db.Timestamptz
+  items       UsualListItem[]
+
+  @@map("usual_lists")
+}
+
+model UsualListItem {
+  id            String    @id @default(uuid()) @db.Uuid
+  usualListId   String    @map("usual_list_id") @db.Uuid
+  usualList     UsualList @relation(fields: [usualListId], references: [id])
+  productId     String    @map("product_id") @db.Uuid
+  product       Product   @relation(fields: [productId], references: [id])
+  quantity      Int
+  usualPriceSen Int?      @map("usual_price_sen")
+  priceLimitSen Int?      @map("price_limit_sen")
+
+  @@unique([usualListId, productId])
+  @@map("usual_list_items")
+}
+
+model WeeklyBasket {
+  id                String       @id @default(uuid()) @db.Uuid
+  shopId            String       @map("shop_id") @db.Uuid
+  shop              Shop         @relation(fields: [shopId], references: [id])
+  basketWeek        String       @map("basket_week")
+  status            BasketStatus
+  deadlineAt        DateTime     @map("deadline_at") @db.Timestamptz
+  fulfilment        Fulfilment
+  pickupPointId     String?      @map("pickup_point_id") @db.Uuid
+  approvedAt        DateTime?    @map("approved_at") @db.Timestamptz
+  approvedByUserId  String?      @map("approved_by_user_id") @db.Uuid
+  skipReason        String?      @map("skip_reason")
+  firstOpenedAt     DateTime?    @map("first_opened_at") @db.Timestamptz
+  approvalRequestId String?      @map("approval_request_id") @db.Uuid
+  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  lines             BasketLine[]
+
+  @@unique([shopId, basketWeek])
+  @@map("weekly_baskets")
+}
+
+model BasketLine {
+  id                 String       @id @default(uuid()) @db.Uuid
+  basketId           String       @map("basket_id") @db.Uuid
+  basket             WeeklyBasket @relation(fields: [basketId], references: [id])
+  productId          String       @map("product_id") @db.Uuid
+  roundId            String       @map("round_id") @db.Uuid
+  quantity           Int
+  priceLimitSen      Int?         @map("price_limit_sen")
+  source             LineSource
+  changedByUserId    String?      @map("changed_by_user_id") @db.Uuid
+  changedByRole      Role?        @map("changed_by_role")
+  staffAddedQuantity Int          @default(0) @map("staff_added_quantity")
+  removed            Boolean
+  notice             String?
+
+  @@unique([basketId, productId])
+  @@map("basket_lines")
+}
+
+model Payment {
+  id                String         @id @default(uuid()) @db.Uuid
+  shopId            String         @map("shop_id") @db.Uuid
+  shop              Shop           @relation(fields: [shopId], references: [id])
+  purpose           PaymentPurpose
+  basketId          String?        @map("basket_id") @db.Uuid
+  linesTotalSen     Int            @map("lines_total_sen")
+  deliveryFeeSen    Int            @map("delivery_fee_sen")
+  totalSen          Int            @map("total_sen")
+  balanceAppliedSen Int            @map("balance_applied_sen")
+  externalSen       Int            @map("external_sen")
+  method            PaymentMethod?
+  status            PaymentStatus
+  partnerReference  String?        @map("partner_reference")
+  deadlineAt        DateTime       @map("deadline_at") @db.Timestamptz
+  createdByUserId   String?        @map("created_by_user_id") @db.Uuid
+  createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  completedAt       DateTime?      @map("completed_at") @db.Timestamptz
+  lines             PaymentLine[]
+
+  @@map("payments")
+}
+
+model PaymentLine {
+  id              String          @id @default(uuid()) @db.Uuid
+  paymentId       String          @map("payment_id") @db.Uuid
+  payment         Payment         @relation(fields: [paymentId], references: [id])
+  productId       String          @map("product_id") @db.Uuid
+  roundId         String          @map("round_id") @db.Uuid
+  basketLineId    String?         @map("basket_line_id") @db.Uuid
+  quantity        Int
+  priceLimitSen   Int?            @map("price_limit_sen")
+  fulfilment      Fulfilment
+  destinationType DestinationType @map("destination_type")
+  pickupPointId   String?         @map("pickup_point_id") @db.Uuid
+  deliveryDate    String          @map("delivery_date")
+  unitGoodsSen    Int             @map("unit_goods_sen")
+  unitFeeSen      Int             @map("unit_fee_sen")
+  unitShippingSen Int             @map("unit_shipping_sen")
+  unitAllInSen    Int             @map("unit_all_in_sen")
+  lineSen         Int             @map("line_sen")
+  baselineSen     Int             @map("baseline_sen")
+  baselineKind    BaselineKind    @map("baseline_kind")
+
+  @@map("payment_lines")
+}
+
+model Participation {
+  id               String              @id @default(uuid()) @db.Uuid
+  roundId          String              @map("round_id") @db.Uuid
+  round            Round               @relation(fields: [roundId], references: [id])
+  shopId           String              @map("shop_id") @db.Uuid
+  shop             Shop                @relation(fields: [shopId], references: [id])
+  paymentId        String              @map("payment_id") @db.Uuid
+  paymentLineId    String              @unique @map("payment_line_id") @db.Uuid
+  basketLineId     String?             @map("basket_line_id") @db.Uuid
+  quantity         Int
+  priceLimitSen    Int?                @map("price_limit_sen")
+  fulfilment       Fulfilment
+  destinationType  DestinationType     @map("destination_type")
+  pickupPointId    String?             @map("pickup_point_id") @db.Uuid
+  deliveryDate     String              @map("delivery_date")
+  joinedAt         DateTime            @map("joined_at") @db.Timestamptz
+  source           ParticipationSource
+  unitShippingSen  Int                 @map("unit_shipping_sen")
+  baselineSen      Int                 @map("baseline_sen")
+  baselineKind     BaselineKind        @map("baseline_kind")
+  startingAllInSen Int                 @map("starting_all_in_sen")
+  paidSen          Int                 @map("paid_sen")
+  finalGoodsSen    Int?                @map("final_goods_sen")
+  finalFeeSen      Int?                @map("final_fee_sen")
+  finalAllInSen    Int?                @map("final_all_in_sen")
+  status           ParticipationStatus
+  outcomeReason    String?             @map("outcome_reason")
+  updatedAt        DateTime            @map("updated_at") @db.Timestamptz
+
+  @@index([roundId, status])
+  @@map("participations")
+}
+
+model DeliveryFeeCharge {
+  id           String            @id @default(uuid()) @db.Uuid
+  shopId       String            @map("shop_id") @db.Uuid
+  deliveryDate String            @map("delivery_date")
+  amountSen    Int               @map("amount_sen")
+  paymentId    String            @map("payment_id") @db.Uuid
+  status       DeliveryFeeStatus
+
+  @@unique([shopId, deliveryDate])
+  @@map("delivery_fee_charges")
+}
+
+model LedgerAccount {
+  id           String          @id @default(uuid()) @db.Uuid
+  key          String          @unique
+  kind         AccountKind
+  shopId       String?         @map("shop_id") @db.Uuid
+  roundId      String?         @map("round_id") @db.Uuid
+  supplierId   String?         @map("supplier_id") @db.Uuid
+  deliveryDate String?         @map("delivery_date")
+  balanceSen   BigInt          @default(0) @map("balance_sen")
+  outgoing     LedgerPosting[] @relation("PostingFrom")
+  incoming     LedgerPosting[] @relation("PostingTo")
+
+  @@map("ledger_accounts")
+}
+
+model LedgerPosting {
+  id              String        @id @default(uuid()) @db.Uuid
+  seq             BigInt        @unique @default(autoincrement())
+  occurredAt      DateTime      @map("occurred_at") @db.Timestamptz
+  fromAccountId   String        @map("from_account_id") @db.Uuid
+  fromAccount     LedgerAccount @relation("PostingFrom", fields: [fromAccountId], references: [id])
+  toAccountId     String        @map("to_account_id") @db.Uuid
+  toAccount       LedgerAccount @relation("PostingTo", fields: [toAccountId], references: [id])
+  amountSen       Int           @map("amount_sen")
+  kind            PostingKind
+  roundId         String?       @map("round_id") @db.Uuid
+  participationId String?       @map("participation_id") @db.Uuid
+  paymentId       String?       @map("payment_id") @db.Uuid
+  claimId         String?       @map("claim_id") @db.Uuid
+  supplierOrderId String?       @map("supplier_order_id") @db.Uuid
+  shopId          String?       @map("shop_id") @db.Uuid
+  supplierId      String?       @map("supplier_id") @db.Uuid
+  memo            String?
+
+  @@map("ledger_postings")
+}
+
+model SupplierOrder {
+  id                   String              @id @default(uuid()) @db.Uuid
+  roundId              String              @unique @map("round_id") @db.Uuid
+  round                Round               @relation(fields: [roundId], references: [id])
+  supplierId           String              @map("supplier_id") @db.Uuid
+  supplier             Supplier            @relation(fields: [supplierId], references: [id])
+  hubId                String              @map("hub_id") @db.Uuid
+  hub                  Hub                 @relation(fields: [hubId], references: [id])
+  quantity             Int
+  acceptedQuantity     Int                 @map("accepted_quantity")
+  unitPriceSen         Int                 @map("unit_price_sen")
+  totalSen             Int                 @map("total_sen")
+  status               SupplierOrderStatus
+  opsApprovalId        String?             @map("ops_approval_id") @db.Uuid
+  supplierApprovalId   String?             @map("supplier_approval_id") @db.Uuid
+  requiredDispatchDate String              @map("required_dispatch_date")
+  expectedDispatchDate String?             @map("expected_dispatch_date")
+  confirmedAt          DateTime?           @map("confirmed_at") @db.Timestamptz
+  dispatchedAt         DateTime?           @map("dispatched_at") @db.Timestamptz
+  rejectionReason      String?             @map("rejection_reason")
+  createdAt            DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  hubCheck             HubCheck?
+
+  @@map("supplier_orders")
+}
+
+model HubCheck {
+  id              String        @id @default(uuid()) @db.Uuid
+  supplierOrderId String        @unique @map("supplier_order_id") @db.Uuid
+  supplierOrder   SupplierOrder @relation(fields: [supplierOrderId], references: [id])
+  goodUnits       Int           @map("good_units")
+  damagedUnits    Int           @map("damaged_units")
+  notes           String?
+  checkedByUserId String?       @map("checked_by_user_id") @db.Uuid
+  checkedAt       DateTime      @map("checked_at") @db.Timestamptz
+  receivedCounted Int           @map("received_counted")
+  shortfallUnits  Int           @map("shortfall_units")
+  excessUnits     Int           @map("excess_units")
+  payoutSen       Int           @map("payout_sen")
+  payoutReference String        @map("payout_reference")
+
+  @@map("hub_checks")
+}
+
+model Allocation {
+  id              String              @id @default(uuid()) @db.Uuid
+  participationId String              @unique @map("participation_id") @db.Uuid
+  allocated       Int
+  missing         Int
+  consignmentId   String?             @map("consignment_id") @db.Uuid
+  pickupId        String?             @map("pickup_id") @db.Uuid
+  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  checkLines      DeliveryCheckLine[]
+  claimLines      ClaimLine[]
+
+  @@map("allocations")
+}
+
+model Consignment {
+  id               String            @id @default(uuid()) @db.Uuid
+  hubId            String            @map("hub_id") @db.Uuid
+  destinationType  DestinationType   @map("destination_type")
+  pickupPointId    String?           @map("pickup_point_id") @db.Uuid
+  shopId           String?           @map("shop_id") @db.Uuid
+  destinationKey   String            @map("destination_key")
+  deliveryDate     String            @map("delivery_date")
+  wave             Int
+  status           ConsignmentStatus
+  statusHistory    Json              @map("status_history")
+  partnerReference String            @map("partner_reference")
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz
+
+  @@unique([hubId, destinationKey, deliveryDate, wave])
+  @@map("consignments")
+}
+
+model Pickup {
+  id                String          @id @default(uuid()) @db.Uuid
+  shopId            String          @map("shop_id") @db.Uuid
+  destinationType   DestinationType @map("destination_type")
+  pickupPointId     String?         @map("pickup_point_id") @db.Uuid
+  destinationKey    String          @map("destination_key")
+  deliveryDate      String          @map("delivery_date")
+  code              String
+  status            PickupStatus
+  readyAt           DateTime?       @map("ready_at") @db.Timestamptz
+  collectedAt       DateTime?       @map("collected_at") @db.Timestamptz
+  collectedByUserId String?         @map("collected_by_user_id") @db.Uuid
+  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  deliveryCheck     DeliveryCheck?
+  photos            Photo[]
+
+  @@unique([shopId, destinationKey, deliveryDate])
+  @@map("pickups")
+}
+
+model DeliveryCheck {
+  id                String              @id @default(uuid()) @db.Uuid
+  pickupId          String              @unique @map("pickup_id") @db.Uuid
+  pickup            Pickup              @relation(fields: [pickupId], references: [id])
+  submittedByUserId String              @map("submitted_by_user_id") @db.Uuid
+  submittedAt       DateTime            @map("submitted_at") @db.Timestamptz
+  result            CheckResult
+  lines             DeliveryCheckLine[]
+  claim             Claim?
+
+  @@map("delivery_checks")
+}
+
+model DeliveryCheckLine {
+  id              String        @id @default(uuid()) @db.Uuid
+  deliveryCheckId String        @map("delivery_check_id") @db.Uuid
+  deliveryCheck   DeliveryCheck @relation(fields: [deliveryCheckId], references: [id])
+  allocationId    String        @map("allocation_id") @db.Uuid
+  allocation      Allocation    @relation(fields: [allocationId], references: [id])
+  expected        Int
+  receivedGood    Int           @map("received_good")
+  missing         Int
+  damaged         Int
+  photos          Photo[]
+
+  @@map("delivery_check_lines")
+}
+
+model Photo {
+  id                  String             @id @default(uuid()) @db.Uuid
+  pickupId            String             @map("pickup_id") @db.Uuid
+  pickup              Pickup             @relation(fields: [pickupId], references: [id])
+  deliveryCheckLineId String?            @map("delivery_check_line_id") @db.Uuid
+  deliveryCheckLine   DeliveryCheckLine? @relation(fields: [deliveryCheckLineId], references: [id])
+  storageKey          String             @map("storage_key")
+  contentType         String             @map("content_type")
+  sizeBytes           Int                @map("size_bytes")
+  uploadedByUserId    String             @map("uploaded_by_user_id") @db.Uuid
+  uploadedAt          DateTime           @map("uploaded_at") @db.Timestamptz
+  deleteAfter         DateTime           @map("delete_after") @db.Timestamptz
+  deletedAt           DateTime?          @map("deleted_at") @db.Timestamptz
+
+  @@map("photos")
+}
+
+model Claim {
+  id                String        @id @default(uuid()) @db.Uuid
+  deliveryCheckId   String        @unique @map("delivery_check_id") @db.Uuid
+  deliveryCheck     DeliveryCheck @relation(fields: [deliveryCheckId], references: [id])
+  shopId            String        @map("shop_id") @db.Uuid
+  totalRefundSen    Int           @map("total_refund_sen")
+  status            ClaimStatus
+  approvalRequestId String?       @map("approval_request_id") @db.Uuid
+  decidedByUserId   String?       @map("decided_by_user_id") @db.Uuid
+  decidedAt         DateTime?     @map("decided_at") @db.Timestamptz
+  reason            String?
+  createdAt         DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  lines             ClaimLine[]
+
+  @@map("claims")
+}
+
+model ClaimLine {
+  id           String     @id @default(uuid()) @db.Uuid
+  claimId      String     @map("claim_id") @db.Uuid
+  claim        Claim      @relation(fields: [claimId], references: [id])
+  allocationId String     @map("allocation_id") @db.Uuid
+  allocation   Allocation @relation(fields: [allocationId], references: [id])
+  missing      Int
+  damaged      Int
+  refundSen    Int        @map("refund_sen")
+
+  @@map("claim_lines")
+}
+
+model ApprovalRequest {
+  id               String         @id @default(uuid()) @db.Uuid
+  type             ApprovalType
+  subjectType      String         @map("subject_type")
+  subjectId        String         @map("subject_id")
+  shopId           String?        @map("shop_id") @db.Uuid
+  supplierId       String?        @map("supplier_id") @db.Uuid
+  assigneeRole     Role           @map("assignee_role")
+  amountSen        Int?           @map("amount_sen")
+  summary          String
+  whyNeeded        String         @map("why_needed")
+  evidence         Json
+  proposedByType   ActorType      @map("proposed_by_type")
+  proposedByUserId String?        @map("proposed_by_user_id") @db.Uuid
+  status           ApprovalStatus
+  decidedByUserId  String?        @map("decided_by_user_id") @db.Uuid
+  decidedAt        DateTime?      @map("decided_at") @db.Timestamptz
+  reason           String?
+  expiresAt        DateTime?      @map("expires_at") @db.Timestamptz
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([status, assigneeRole])
+  @@map("approval_requests")
+}
+
+model Notification {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  role         Role
+  shopId       String?   @map("shop_id") @db.Uuid
+  supplierId   String?   @map("supplier_id") @db.Uuid
+  type         String
+  title        String
+  body         String
+  link         String
+  whatsappText String    @map("whatsapp_text")
+  dedupeKey    String?   @unique @map("dedupe_key")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  readAt       DateTime? @map("read_at") @db.Timestamptz
+
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
+model ActivityLogEntry {
+  seq           BigInt    @id
+  occurredAt    DateTime  @map("occurred_at") @db.Timestamptz
+  actorUserId   String?   @map("actor_user_id") @db.Uuid
+  actorRole     Role?     @map("actor_role")
+  actorType     ActorType @map("actor_type")
+  shopId        String?   @map("shop_id") @db.Uuid
+  supplierId    String?   @map("supplier_id") @db.Uuid
+  operatorScope Boolean   @map("operator_scope")
+  action        String
+  subjectType   String    @map("subject_type")
+  subjectId     String    @map("subject_id")
+  before        Json?
+  after         Json?
+  reason        String?
+  aiMetadata    Json?     @map("ai_metadata")
+  prevHash      String    @map("prev_hash")
+  hash          String
+
+  @@index([shopId])
+  @@index([supplierId])
+  @@index([actorUserId])
+  @@index([subjectType, subjectId])
+  @@map("activity_log_entries")
+}
+
+model ActivityChainHead {
+  id       Int    @id @default(1)
+  lastSeq  BigInt @map("last_seq")
+  lastHash String @map("last_hash")
+
+  @@map("activity_chain_head")
+}
+
+model AiSuggestionRun {
+  id            String      @id @default(uuid()) @db.Uuid
+  shopId        String      @map("shop_id") @db.Uuid
+  kind          AiRunKind
+  redactedInput String      @map("redacted_input")
+  model         String
+  status        AiRunStatus
+  suggestions   Json
+  latencyMs     Int         @map("latency_ms")
+  createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  confirmedAt   DateTime?   @map("confirmed_at") @db.Timestamptz
+  changeSummary Json?       @map("change_summary")
+
+  @@map("ai_suggestion_runs")
+}
+
+model IntegrationEvent {
+  id         String   @id @default(uuid()) @db.Uuid
+  seq        BigInt   @unique @default(autoincrement())
+  type       String
+  version    Int
+  occurredAt DateTime @map("occurred_at") @db.Timestamptz
+  data       Json
+
+  @@map("integration_events")
+}
+
+model DemoSettings {
+  id                Int       @id @default(1)
+  demoMode          Boolean   @map("demo_mode")
+  clockOffsetMs     BigInt    @map("clock_offset_ms")
+  seedVersion       String    @map("seed_version")
+  lastResetAt       DateTime? @map("last_reset_at") @db.Timestamptz
+  featuredProductId String?   @map("featured_product_id") @db.Uuid
+
+  @@map("demo_settings")
+}
+
+model IdempotencyRecord {
+  scope     String
+  key       String
+  status    Int
+  body      Json
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@id([scope, key])
+  @@map("idempotency_records")
+}
+
+model RateLimitHit {
+  id     String   @id @default(uuid()) @db.Uuid
+  bucket String
+  at     DateTime @db.Timestamptz
+
+  @@index([bucket, at])
+  @@map("rate_limit_hits")
+}

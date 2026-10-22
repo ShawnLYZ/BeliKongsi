@@ -32,6 +32,17 @@ describe('route()', () => {
     expect(await res.json()).toEqual({ params: { id: '42' } });
   });
 
+  it('does not resolve the deps when the handler never touches them', async () => {
+    // With no injected deps and no environment, getDeps() would throw.
+    setDepsForTests(null);
+    vi.stubEnv('DATABASE_URL', '');
+    const handler = route({ auth: 'public' }, async () => json({ ok: true }));
+    const res = await handler(new Request('http://localhost/x'), ctx());
+    vi.unstubAllEnvs();
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+  });
+
   it('hands the handler a parsed body when the JSON is valid', async () => {
     setDepsForTests(deps);
     const handler = route({ auth: 'public', body: z.object({ name: z.string() }) }, async (a) =>

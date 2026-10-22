@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { PrismaClient } from '@/generated/prisma/client';
 import { setDepsForTests, type AppDeps } from '@/server/platform/deps';
 import { createPrismaClient } from '@/server/platform/db';
+import { systemClock } from '@/server/adapters/clock';
 import { callRoute } from './helpers/route';
 import { createTestDatabase } from './helpers/db';
 
@@ -21,6 +22,7 @@ function depsFor(url: string): AppDeps {
       GEMINI_MODEL: 'gemini-3.5-flash-lite',
       STORAGE_ADAPTER: 'local',
     },
+    clock: systemClock,
   };
 }
 

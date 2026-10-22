@@ -41,6 +41,8 @@ describe('embedded postgres', () => {
     const dir = tmpDir();
     const c1 = await startCluster({ dir, port: 54391, password: 'postgres' });
     await c1.stop();
+    // stop() returns only once every postgres process has exited, so nothing holds the port.
+    expect(await isPortListening(54391)).toBe(false);
     writeFileSync(join(dir, 'postmaster.pid'), '99999\n'); // what a crash leaves behind
     const c2 = await startCluster({ dir, port: 54391, password: 'postgres' });
     try {
@@ -48,6 +50,7 @@ describe('embedded postgres', () => {
     } finally {
       await c2.stop();
     }
+    expect(await isPortListening(54391)).toBe(false);
   }, 120_000);
 
   it('ensureDatabase creates a database once and is idempotent', async () => {
