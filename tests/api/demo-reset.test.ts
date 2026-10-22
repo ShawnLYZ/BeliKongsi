@@ -44,10 +44,17 @@ describe('demo state and reset', () => {
     expect(await app.prisma.shop.count()).toBe(43);
     expect((await verifyLogChain(app.prisma)).valid).toBe(true);
     const entries = await app.prisma.activityLogEntry.findMany({ orderBy: { seq: 'asc' } });
-    // Seeding opens one round per product, so each reset also leaves twelve round.opened entries.
-    expect(entries.filter((e) => e.action === 'demo.reset')).toHaveLength(1);
-    expect(entries.filter((e) => e.action === 'round.opened')).toHaveLength(12);
-    expect(entries).toHaveLength(13);
+    // Seeding the week writes one set of entries: 12 rounds opened, 81 background joins and two
+    // paid baskets (83 payments, 89 participations), so the second reset ran on top of the first.
+    const count = (action: string) => entries.filter((e) => e.action === action).length;
+    expect(count('demo.reset')).toBe(1);
+    expect(count('round.opened')).toBe(12);
+    expect(count('payment.created')).toBe(83);
+    expect(count('payment.succeeded')).toBe(83);
+    expect(count('participation.joined')).toBe(89);
+    expect(count('basket.drafted')).toBe(2);
+    expect(count('basket.approved')).toBe(2);
+    expect(entries).toHaveLength(272);
   });
 
   it('sets the demo clock to the most recent Monday 06:05', async () => {

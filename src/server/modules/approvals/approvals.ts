@@ -10,6 +10,7 @@ import type { Caller } from '@/server/platform/caller';
 import type { AppDeps } from '@/server/platform/deps';
 import { conflict, forbidden, notFound, unprocessable } from '@/server/platform/errors';
 import { withTransaction, type TxContext } from '@/server/platform/tx';
+import { skipDraftBasket } from '../baskets/lifecycle';
 
 type Json = Prisma.InputJsonValue;
 
@@ -187,3 +188,17 @@ export async function decideApproval(
     return (await toViews(ctx.tx, [updated]))[0]!;
   });
 }
+
+// A weekly basket is approved by paying for it on the basket screen, never from the inbox; a
+// rejection there skips the basket for the week.
+registerApprovalHandler('weekly_basket', {
+  async onApprove() {
+    throw unprocessable(
+      'USE_BASKET_SCREEN',
+      'Approve and pay for the basket on the basket screen.',
+    );
+  },
+  async onReject(ctx, request, input) {
+    await skipDraftBasket(ctx, request.subjectId, input.reason?.trim() || null);
+  },
+});

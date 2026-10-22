@@ -1,6 +1,8 @@
 import { Prisma } from '@/generated/prisma/client';
 import type { UsualListView } from '@/lib/views/usual-list';
+import { isoWeekOf } from '@/lib/time';
 import { appendLog, type LogEntryInput } from '@/server/modules/activity/log';
+import { draftBasketForShop } from '@/server/modules/baskets/draft';
 import { productImageUrl } from '@/server/modules/rounds/read';
 import type { Caller } from '@/server/platform/caller';
 import type { AppDeps } from '@/server/platform/deps';
@@ -264,6 +266,9 @@ export async function saveUsualList(
     } else {
       for (const entry of itemLogs) await appendLog(ctx, entry);
     }
+
+    // A shop that saves its list during an open week gets this week's basket straight away.
+    await draftBasketForShop(ctx, shopId, isoWeekOf(now));
 
     const list = await tx.usualList.findUniqueOrThrow({
       where: { id: listId },

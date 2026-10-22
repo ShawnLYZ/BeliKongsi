@@ -97,12 +97,16 @@ export async function priceForShop(
     total: number;
     priceLimitSen?: number | null;
     unitName: string;
+    /** The active pickup points, when the caller already read them (inside its transaction). */
+    points?: PickupPoint[];
   },
 ): Promise<ShopQuote> {
-  const points = await deps.prisma.pickupPoint.findMany({
-    where: { active: true },
-    orderBy: { id: 'asc' },
-  });
+  const points =
+    opts.points ??
+    (await deps.prisma.pickupPoint.findMany({
+      where: { active: true },
+      orderBy: { id: 'asc' },
+    }));
   const destination = opts.destination ?? defaultDestination(shop, points);
   const priced = priceAtDestination(deps, round, shop, points, destination);
   const result = quote({

@@ -107,6 +107,32 @@ describe('ledger', () => {
     expect(c?.failures[0]?.detail).toContain('round_hold');
   });
 
+  it('flags a delivery fee hold that does not match its held charge', async () => {
+    const D = '2026-11-10';
+    const fee = (amountSen: number) =>
+      withTransaction(t.deps, sys, (ctx) =>
+        post(ctx, {
+          from: { kind: 'partner_cash' },
+          to: { kind: 'delivery_fee_hold', shopId: S, deliveryDate: D },
+          amountSen,
+          kind: 'delivery_fee_in',
+        }),
+      );
+    await fee(1200);
+    const c = await check('delivery_fee_holds_match_charges');
+    expect(c?.passed).toBe(false);
+    expect(c?.failures[0]?.detail).toContain(D);
+    const charge = await t.deps.prisma.deliveryFeeCharge.create({
+      data: { shopId: S, deliveryDate: D, amountSen: 1200, paymentId: R, status: 'held' },
+    });
+    expect(await check('delivery_fee_holds_match_charges')).toMatchObject({ passed: true });
+    await t.deps.prisma.deliveryFeeCharge.update({
+      where: { id: charge.id },
+      data: { status: 'refunded' },
+    });
+    expect(await check('delivery_fee_holds_match_charges')).toMatchObject({ passed: false });
+  });
+
   it('passes every check on a clean database', async () => {
     const report = await runMoneyChecks(t.deps.prisma);
     expect(report.checks.map((c) => c.id)).toEqual([
@@ -117,6 +143,7 @@ describe('ledger', () => {
       'participation_paid_equals_refunds_plus_allocated',
       'kept_within_limits',
       'final_not_above_starting',
+      'delivery_fee_holds_match_charges',
     ]);
     expect(report.allPassed).toBe(true);
   });

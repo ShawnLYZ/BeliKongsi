@@ -7,6 +7,7 @@ import { createFakeOrderReader } from '@/server/adapters/ai/fake';
 import { systemClock } from '@/server/adapters/clock';
 import { createLocalStorage } from '@/server/adapters/storage/local';
 import { simulatedLogistics } from '@/server/adapters/logistics';
+import { simulatedPayments } from '@/server/adapters/payments';
 import { callRoute } from './helpers/route';
 import { createTestDatabase } from './helpers/db';
 
@@ -28,6 +29,7 @@ function depsFor(url: string): AppDeps {
     },
     clock: systemClock,
     logistics: simulatedLogistics,
+    payments: simulatedPayments,
     ai: createFakeOrderReader(),
     storage: createLocalStorage({ dir: tmpdir() }),
   };

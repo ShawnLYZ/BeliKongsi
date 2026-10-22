@@ -4,6 +4,7 @@ import { createGeminiOrderReader } from '@/server/adapters/ai/gemini';
 import type { OrderReader } from '@/server/adapters/ai/types';
 import { systemClock, type Clock } from '@/server/adapters/clock';
 import { simulatedLogistics, type LogisticsPartner } from '@/server/adapters/logistics';
+import { simulatedPayments, type PaymentsPartner } from '@/server/adapters/payments';
 import { createLocalStorage } from '@/server/adapters/storage/local';
 import { createSupabaseStorage } from '@/server/adapters/storage/supabase';
 import type { StorageAdapter } from '@/server/adapters/storage/types';
@@ -15,6 +16,7 @@ export interface AppDeps {
   env: ServerEnv;
   clock: Clock;
   logistics: LogisticsPartner;
+  payments: PaymentsPartner;
   ai: OrderReader;
   storage: StorageAdapter;
 }
@@ -29,6 +31,7 @@ export function getDeps(): AppDeps {
       env,
       clock: systemClock,
       logistics: simulatedLogistics,
+      payments: simulatedPayments,
       ai:
         env.AI_ADAPTER === 'gemini'
           ? createGeminiOrderReader({ apiKey: env.GEMINI_API_KEY!, model: env.GEMINI_MODEL })

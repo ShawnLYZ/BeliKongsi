@@ -4,8 +4,8 @@ import { isoWeekOf } from '@/lib/time';
 import { systemCaller } from '@/server/platform/caller';
 import type { AppDeps } from '@/server/platform/deps';
 import { withTransaction, type TxContext } from '@/server/platform/tx';
-import { openNextRound } from '@/server/modules/rounds/open';
 import { CUTOFF_TIME, CUTOFF_WEEKDAY, PRODUCTS } from './catalogue';
+import { seedCurrentWeek } from './current-week';
 import { seedId } from './ids';
 import {
   HUBS,
@@ -199,19 +199,6 @@ export async function seedReferenceData(
   });
 }
 
-/**
- * Temporary phase: opens the first round of every active product at the anchor so the dev
- * database and demo tests have open rounds. M4 replaces it with seedCurrentWeek.
- */
-async function openRoundsAtAnchor(ctx: TxContext, anchor: Date): Promise<void> {
-  const products = await ctx.tx.product.findMany({
-    where: { active: true },
-    select: { id: true },
-    orderBy: { id: 'asc' },
-  });
-  for (const { id } of products) await openNextRound(ctx, id, anchor);
-}
-
 /** Seeds the whole demo world in one transaction. */
 export async function seedDemo(deps: AppDeps, opts: { anchorMonday: Date }): Promise<void> {
   await seedProductImages(deps);
@@ -220,9 +207,8 @@ export async function seedDemo(deps: AppDeps, opts: { anchorMonday: Date }): Pro
     systemCaller('seed demo data'),
     async (ctx) => {
       await seedReferenceData(ctx, opts);
-      // Later milestones add their phases here, in this order: M9 seeds the history week, then
-      // M4 seeds the current week.
-      await openRoundsAtAnchor(ctx, opts.anchorMonday);
+      // M9 adds the history week here, before the current week.
+      await seedCurrentWeek(ctx, opts.anchorMonday);
     },
     { timeoutMs: 60_000 },
   );

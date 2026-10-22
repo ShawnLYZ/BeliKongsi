@@ -6,7 +6,7 @@
 
 **Architecture:** The baskets module drafts and edits baskets. The payments module owns `createPayment` → `completePaymentSuccess` / `failPayment` and is the only code that creates participations or money-in postings. Jobs (`runDueJobs`) run from a protected endpoint, from Vercel Cron, and as "due work" after page loads. `seedCurrentWeek` replays the demo week through the real services under a seed clock.
 
-**Tech Stack:** Prisma 7 interactive transactions, Next.js `after()`, shadcn/ui (sheet, tabs, toast).
+**Tech Stack:** Prisma 7 interactive transactions, Next.js `after()` (from `next/server`), shadcn/ui. Only `button`, `card` and `sonner` exist in `src/components/ui` today, so Task 8 adds `sheet` and `tabs` with the shadcn CLI; toasts use the existing `sonner`.
 
 **Spec:** PRD §7 (calendar, jobs), §8 (approve and pay, postings, receipts, money history), §12 (weekly basket approval), §13 (basket and payment notices), §20 (weekly basket; payments and balance; rounds participations and cancel; jobs), §22 (weekly basket, checkout, money, staff), stories 9, 27–39, 46, 47, 52–58, 95–98, 102, 146; build design C5, C11, R10, R11; index §5.
 
@@ -34,17 +34,37 @@
 - `openDueRounds` runs at the anchor, so every round closes Thu 5 Nov 20:00.
 - `setupKedaiKopi(app)`, in `tests/api/helpers/scenarios.ts`, saves Kedai Kopi's usual list from the sample order (`CM` 6, `OIL` 2, `EGG_A` 10, `COFFEE` 1, `CUPS` 2, at the sample prices) with the Ipoh pickup point.
 - From Task 5 on, `seed: 'demo'` adds the seeded week.
+- The default test clock is Mon 2 Nov 06:05 MYT (`2026-11-01T22:05:00Z`) and it is also the seed anchor. Tests that set the clock to 06:00 or 06:10 move it by hand; `openDueRounds` stamps `opensAt` with whatever the clock says when it runs.
+- Seed shops: Kedai Kopi Contoh (`KEDAI_KOPI`, pickup Ipoh, `setupCompletedAt` null), Gerai (`GERAI`, door), Kafe (`KAFE`, pickup Kuantan). Seed users: `ahSeng`/`rahim` (Kedai owner/staff), `siti`/`kumar` (Gerai), `mei`/`danial` (Kafe), `nadia` (Ops). Background shops are `BG01` to `BG40`.
+- Existing M2/M3 tests that use the default `seed: 'demo'` (`catalogue-rounds`, `usual-list`, `usual-list-parse`, `settings`, `session`, `shell-api`, `demo-reset`) must still pass after each task. Task 1 adds a `basket.drafted` log entry and a notification when a usual list is saved, and Task 5 puts participations into the seeded rounds (`catalogue-rounds.test.ts` line 80 expects `totalQuantity: 0`). Fix their expectations in the task that changes them.
+
+## Code as built (confirmed in Task 0)
+
+M4 uses these exactly as they exist; do not invent other signatures.
+
+- `TxContext = { tx, now: Date, caller, actor, deps }`; `withTransaction(deps, caller, fn, { timeoutMs? })`. An inner call joins the outer transaction and reuses its `now`. Reads made with `deps.prisma` do not see the transaction's uncommitted rows, so every service the seed calls reads through `ctx.tx` and uses `ctx.now`.
+- `post(ctx, { from, to, amountSen, kind, refs?: { roundId?, participationId?, paymentId?, shopId?, … }, memo? })`. It throws `RangeError` for an amount of 0 or less, so never post a zero split. `balanceOf(db, ref)`. Account refs: `shop_balance {shopId}`, `round_hold {roundId}`, `delivery_fee_hold {shopId, deliveryDate}`, `partner_cash`. `shop_balance`, `round_hold` and `delivery_fee_hold` may not go negative.
+- `createApproval(ctx, { type, subjectType, subjectId, shopId?, assigneeRole, amountSen?, summary, whyNeeded, evidence, expiresAt? }): Promise<{ id }>`. It creates the request as `pending`; for `weekly_basket` the basket code later sets `ApprovalRequest.status`, `decidedByUserId` and `decidedAt` itself. `decideApproval` throws a plain `Error` when no handler is registered for the type, so Task 3 registers a `weekly_basket` handler whose `onApprove` throws 422 `USE_BASKET_SCREEN` and whose `onReject` calls the skip logic (the inbox hides both buttons for baskets, but the API route is open).
+- `notify(ctx, { type, audience: { shopId?, roles, userIds? }, link, message: (role) => { title, body, whatsappText }, dedupeKey? })`. `TEMPLATES` is built by `defineTemplates({ type: (data) => (role) => message })` and is empty today, so M4 adds `basket.ready`, `basket.staff_added`, `payment.succeeded`, `payment.failed`, `participation.cancelled` and `basket.reminder`. A message is at most 300 characters, and staff messages may not contain `RM <digit>`.
+- `emitEvent(ctx, type, data)`: `type` must be one of the PRD §21 `EventType`s (all M4 types exist). Data keys may not match `name|phone|email|address`.
+- `appendLog(ctx, { action, subjectType, subjectId, scope: { shopId?, supplierId?, operator? }, before?, after?, reason? })`: `action` must be in the PRD §14 `ACTIONS` list (every M4 action exists).
+- `route({ auth, body?, query?, idempotent? }, handler)` with `auth` `'public' | 'session' | Role[]`; `idempotent` needs a non-public auth. Mutating requests under `/api/jobs/` skip the origin check.
+- `priceForShop(deps, round /* with hub */, shop /* with defaultPickupPoint */, { destination?, quantity, total, priceLimitSen?, unitName }): Promise<ShopQuote>` and `activeTotals(db, roundId)`. `quoteForShop(deps, caller, roundId, …)` needs a person caller with a shop membership and an open round (422 `ROUND_NOT_OPEN`), so `createPayment` uses `priceForShop`, not `quoteForShop`.
+- `DestinationInput = { type: 'pickup_point'; pickupPointId } | { type: 'door' }`. `defaultDestination(shop, points)`. `nextCutoffAfter(product, instant)` is strictly after `instant`. `deliveryDateOf(cutoff): 'YYYY-MM-DD'`.
+- `roundProgress(db, roundId): { totalQuantity, shopCount, currentTier, unitsToNextTier, nextTierUnitPriceSen }`.
+- `isoWeekOf(d)`, `isoWeekStart(week)`, `addIsoWeeks(week, n)`, `mytDate(d)` in `@/lib/time`; `formatRM`, `formatUnits(q, unitName)`, `formatMytShort`, `formatMytDate` in `@/lib/format`.
+- Schema today: `WeeklyBasket` has `firstOpenedAt`, `approvalRequestId`, `approvedAt`, `approvedByUserId`, `skipReason`, `deadlineAt`, `fulfilment` but no `draftedAt`; `BasketLine.roundId` is required and `removed` has no default; `DeliveryFeeCharge` is unique on `(shopId, deliveryDate)` and has no relation to `Payment`; `Participation.paymentLineId` is unique.
 
 ---
 
 ### Task 0: Re-sync
 
-- [ ] **Step 1:** `git switch -c m04-weekly-basket-and-payments`
-- [ ] **Step 2:** Follow index §6. Confirm the consumed names:
+- [x] **Step 1:** `git switch -c m04-weekly-basket-and-payments`
+- [x] **Step 2:** Follow index §6. Confirm the consumed names (done; see "Code as built" above):
   - M2: `post`, `balanceOf`, `runMoneyChecks`, `createApproval`, `notify`, `TEMPLATES`, `emitEvent`, `appendLog`, `withIdempotency`, `route` with `idempotent`.
   - M3: `quoteForShop`, `DestinationInput`, `openNextRound`, `openDueRounds`, `nextCutoffAfter`, `deliveryDateOf`, `simulatedLogistics`, `saveUsualList`, `updateShopSettings`, `roundProgress`, the temporary seed phase `openRoundsAtAnchor`.
   - M1: `quote`, `unitAmounts`, `participationSavings`.
-- [ ] **Step 3:** Commit any plan edits.
+- [x] **Step 3:** Commit any plan edits.
 
 ---
 
@@ -67,7 +87,7 @@
     - Usual-list items are merged into a draft that already holds staff additions: quantity = usual quantity + `staffAddedQuantity`, and the highlight is kept (C5).
     - Staff-added lines without a round are resolved to this week's round when one exists.
     - `deadlineAt` = the earliest line cut-off; fulfilment comes from the shop's default.
-    - It creates the `weekly_basket` approval (assignee owner, amount = total now), sets `draftedAt`, logs `basket.drafted`, emits `basket.drafted { basketId, shopId, week, lineCount }` and notifies the owner with `basket.ready`.
+    - It creates the `weekly_basket` approval (`createApproval`, assignee owner, amount = total now; the basket stores its id in `approvalRequestId`), sets `draftedAt`, logs `basket.drafted`, emits `basket.drafted { basketId, shopId, week, lineCount }` and notifies the owner with `basket.ready`.
     - With no lines it returns `{ basketId: null }` and creates nothing.
   - `draftWeeklyBaskets(deps, opts?: { shopIds?: string[] }): Promise<{ drafted: number }>`.
     - It runs only once `now ≥ isoWeekStart(week) + 6 h` (Monday 06:00 MYT), unless `shopIds` is given (the setup trigger).
@@ -248,7 +268,7 @@ it('records when the owner first opens the basket (C11)', async () => {
   - Payments module: `src/server/modules/payments/create.ts`, `src/server/modules/payments/complete.ts`, `src/server/modules/payments/simulate.ts`
   - Basket approval: `src/server/modules/baskets/approve.ts`
   - Routes: `src/app/api/baskets/[basketId]/approve/route.ts`, `src/app/api/payments/[paymentId]/simulate/route.ts`
-- Modify: `src/server/platform/deps.ts` (`AppDeps.payments`), `src/server/modules/notifications/templates.ts` (`payment.succeeded`, `payment.failed`), `tests/api/helpers/scenarios.ts` (`payBasket(app, userKey, basketId)`)
+- Modify: `src/server/platform/deps.ts` (`AppDeps.payments`, set in `getDeps`), `tests/api/helpers/app.ts` (`createTestDeps` builds the `AppDeps` literal, so it gets `payments: simulatedPayments`), `src/server/modules/notifications/templates.ts` (`payment.succeeded`, `payment.failed`), `tests/api/helpers/scenarios.ts` (`payBasket(app, userKey, basketId)`), and the approvals module (register the `weekly_basket` handler described under "Code as built")
 - Test: `tests/api/payments.test.ts`
 
 **Interfaces:**
@@ -259,14 +279,14 @@ it('records when the owner first opens the basket (C11)', async () => {
   - `type PaymentLineInput = { productId; roundId; basketLineId?: string; quantity; priceLimitSen: number | null; destination: DestinationInput }`.
   - `createPayment(ctx, input: { shopId; purpose: 'basket' | 'join'; basketId?: string; lines: PaymentLineInput[]; deadlineAt: Date; source: ParticipationSource; settleImmediatelyWith?: 'duitnow_qr' | 'fpx' }): Promise<PaymentSummary>`.
     - `PaymentSummary = { paymentId; status: 'pending' | 'succeeded'; linesTotalSen; deliveryFeeSen; totalSen; balanceAppliedSen; externalSen; checkoutUrl: string | null }`.
-    - It writes `PaymentLine`s with starting unit amounts, shipping, baseline (usual price, otherwise buy-alone) and `deliveryDate = deliveryDateOf(round.cutoffAt)`.
+    - It prices each line with `priceForShop` (not `quoteForShop`; the seed calls it as a system caller). It writes `PaymentLine`s with starting unit amounts, shipping, baseline (usual price, otherwise buy-alone) and `deliveryDate = deliveryDateOf(round.cutoffAt)`.
     - It adds one delivery fee per door delivery date that has no held or passed charge and no other pending payment for the same date.
     - `settleImmediatelyWith` is used by the seed and by M11 AutoDebit: it completes at once without a checkout.
   - `completePaymentSuccess(ctx, paymentId, method: PaymentMethod): Promise<void>`. In one transaction:
     - **Balance first:** applied line by line, ordered by `roundId` then payment line id, and then to delivery fees.
     - **Postings:** `shop_balance → round_hold` (`balance_applied`), `partner_cash → round_hold` (`payment_in`), and `→ delivery_fee_hold` (`delivery_fee_in` or `balance_applied`).
     - **Participations** are created with status `active`.
-    - **`DeliveryFeeCharge`** rows are created as `held`. If the charge already exists, the duplicate fee is refunded to the balance (`refund_delivery_fee`).
+    - **`DeliveryFeeCharge`** rows are created as `held`. The table is unique on `(shopId, deliveryDate)`, so a row left `refunded` by a cancellation is set back to `held` with the new `paymentId` instead of inserted. If a `held` or `passed_to_partner` charge already exists, the duplicate fee is refunded to the balance (`refund_delivery_fee`). Postings with an amount of 0 are skipped.
     - **The basket** becomes `paid`, and its approval `approved` by the owner.
     - **Logs:** `payment.succeeded`, `balance.applied`, `participation.joined` ×N, `basket.approved`.
     - **Events:** `basket.approved { basketId, shopId, week, lineCount, amountSen }`, and `participation.joined` ×N with `{ participationId, roundId, shopId, quantity, outcome: 'active' }`.
@@ -361,7 +381,7 @@ it('removes a line whose round has closed before approval, with a notice', async
   - `cancelParticipation(deps, caller, participationId): Promise<{ refundSen: number; deliveryFeeRefundSen: number }>` (owner):
     - The participation must be active and before cut-off; otherwise 409 `ROUND_CLOSED`.
     - It posts `round_hold → shop_balance` (`refund_cancelled`) for the full `paidSen`.
-    - The delivery fee is also refunded when no active door participations remain for that date.
+    - The delivery fee is also refunded when no active door participations remain for that date: the `held` `DeliveryFeeCharge` becomes `refunded` and the posting is `delivery_fee_hold → shop_balance` (`refund_delivery_fee`).
     - It logs `participation.cancelled` and `refund.issued`, and emits `participation.cancelled` and `refund.issued { shopId, amountSen, kind: 'full' | 'delivery_fee', referenceId }`.
     - It notifies the owner: `Cancelled: {units} of {shortName}. {RM refund} is back in your balance.`
 
@@ -404,16 +424,16 @@ it('keeps cancelling and joining from staff', async () => {
 **Files:**
 
 - Create: `prisma/seed/current-week.ts`
-- Modify: `prisma/seed/index.ts` (remove the M3 phase `openRoundsAtAnchor`; add `seedCurrentWeek`)
+- Modify: `prisma/seed/index.ts` (remove the M3 phase `openRoundsAtAnchor`; add `seedCurrentWeek`), `src/server/platform/tx.ts` (new export `setTransactionNow(now: Date)`: sets the `now` that later joined `withTransaction` calls receive; no-op outside a transaction), `tests/api/catalogue-rounds.test.ts` (it expects an empty round on the demo seed)
 - Test: `tests/api/seed-current-week.test.ts`
 
 **Interfaces:**
 
-- Produces: `seedCurrentWeek(deps: AppDeps, clock: MutableClock, anchorMonday: Date): Promise<void>`. It runs inside `seedDemo`'s transaction. The anchor is Mon 06:05 MYT. Steps:
+- Produces: `seedCurrentWeek(ctx: TxContext, anchorMonday: Date): Promise<void>`. `seedDemo` calls it in place of `openRoundsAtAnchor`, inside its single transaction (so `resetDemo` stays atomic). A transaction has one `now`, and `deps.prisma` cannot see its uncommitted rows, so there is no seed clock and no `draftWeeklyBaskets(deps)` call. Instead each step calls `setTransactionNow(t)` and then the real services, which read through `ctx.tx`; at the end it restores the original `now`. The anchor is Mon 06:05 MYT. Steps:
   1. **Thu 29 Oct 20:00 MYT** (anchor − 3 d 10 h 5 min): `openNextRound` for every active product.
   2. **Background joins**, k = 0…80 in index §5.7 order, at Fri 30 Oct 09:00 MYT + k × 45 min: `joinRound` as `systemCaller('seed')` with `opts { shopId: BG(k mod 40 + 1), source: 'background_seed', settleImmediatelyWith: 'fpx' }`. Each shop uses its default destination.
-  3. **Mon 06:00:** `draftWeeklyBaskets`.
-  4. **06:01:** Siti approves Gerai's basket and the simulated payment succeeds (`duitnow_qr`).
+  3. **Mon 06:00:** `draftBasketForShop(ctx, shopId, isoWeekOf(anchorMonday))` for Gerai and Kafe (the non-background shops with usual lists).
+  4. **06:01:** Siti approves Gerai's basket and the simulated payment succeeds (`duitnow_qr`). The seed builds Siti's `Session` from her seeded membership (`seedId('membership', 'siti')`, role `owner`, her `shopId`) and calls `approveBasket` and `simulatePaymentResult` with `personCaller(session)`.
   5. **06:03:** Mei does the same for Kafe (`fpx`).
   6. Finish at 06:05 (the anchor).
 
@@ -525,7 +545,7 @@ it('lets Ops read a shop’s money history', async () => {
 
 **Files:**
 
-- Create: `src/server/modules/baskets/lifecycle.ts`, `src/server/modules/jobs/run.ts`, `src/server/platform/due-work.ts`, `src/app/api/baskets/[basketId]/skip/route.ts`, `src/app/api/jobs/run/route.ts`
+- Create: `vercel.json` (a cron entry for `GET /api/jobs/run`; the repo has none yet), `src/server/modules/baskets/lifecycle.ts`, `src/server/modules/jobs/run.ts`, `src/server/platform/due-work.ts`, `src/app/api/baskets/[basketId]/skip/route.ts`, `src/app/api/jobs/run/route.ts`
 - Modify: `src/server/modules/notifications/templates.ts` (`basket.reminder`)
 - Test: `tests/api/basket-lifecycle-jobs.test.ts`
 
@@ -587,6 +607,7 @@ it('changes nothing when the jobs run twice', async () => {
 **Files:**
 
 - Create:
+  - Shadcn components: `src/components/ui/sheet.tsx`, `src/components/ui/tabs.tsx` (added with the shadcn CLI)
   - Pages: `src/app/(shell)/owner/basket/page.tsx`, `src/app/checkout/[paymentId]/page.tsx`, `src/app/(shell)/owner/receipts/[paymentId]/page.tsx`, `src/app/(shell)/owner/money/page.tsx`, `src/app/(shell)/owner/kongsi/page.tsx`, `src/app/(shell)/staff/add/page.tsx`
   - Components: `src/components/baskets/*`, `src/components/checkout/*`, `src/components/rounds/join-sheet.tsx`, `src/components/rounds/why-this-price-sheet.tsx`
 - Modify:

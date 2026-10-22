@@ -7,12 +7,14 @@ import { searchCatalogue } from '@/server/modules/catalogue/catalogue';
 import { listOpenRounds } from '@/server/modules/rounds/read';
 import { personCaller } from '@/server/platform/caller';
 import { getDeps } from '@/server/platform/deps';
+import { scheduleDueWork } from '@/server/platform/due-work';
 import { requireOwnerShop } from '@/server/platform/page-auth';
 import { getPageSession } from '@/server/platform/session-page';
 
 export default async function OwnerRoundsPage() {
   const { session } = requireOwnerShop(await getPageSession());
   const deps = getDeps();
+  scheduleDueWork(deps);
   const caller = personCaller(session);
   const [rounds, catalogue, clock] = await Promise.all([
     listOpenRounds(deps, caller) as Promise<OpenRoundView[]>,

@@ -18,6 +18,22 @@ const outerTx = new AsyncLocalStorage<{
   closed: boolean;
 }>();
 
+/**
+ * Sets the `now` that later `withTransaction` calls joining the current transaction receive. The
+ * seed uses it to replay the demo week at its own times inside one transaction. Outside a
+ * transaction it does nothing. The caller restores the previous `now` when it is done.
+ */
+export function setTransactionNow(now: Date): void {
+  const store = outerTx.getStore();
+  if (store && !store.closed) store.now = now;
+}
+
+/** True inside an open `withTransaction`: a further call joins it rather than starting its own. */
+export function inTransaction(): boolean {
+  const store = outerTx.getStore();
+  return !!store && !store.closed;
+}
+
 const MAX_RETRIES = 3;
 const DEFAULT_TIMEOUT_MS = 15_000;
 const RETRY_CODES = ['40001', '40P01', 'P2034'];

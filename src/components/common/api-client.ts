@@ -87,3 +87,12 @@ export const apiFetch = createApiFetch({
   notify: (message) => toast.error(message),
   newKey: () => crypto.randomUUID(),
 });
+
+/**
+ * True when the server definitely refused the request (a 4xx answer). A network error or a 5xx
+ * may mean the request was applied but the answer was lost, so a retry must reuse its
+ * Idempotency-Key rather than start again with a new one.
+ */
+export function isDefiniteRejection(error: unknown): boolean {
+  return error instanceof ApiError && error.status >= 400 && error.status < 500;
+}

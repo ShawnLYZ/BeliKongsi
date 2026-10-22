@@ -1,7 +1,14 @@
-import type { Prisma, PrismaClient, Product, Round } from '@/generated/prisma/client';
+import type {
+  Participation,
+  Prisma,
+  PrismaClient,
+  Product,
+  Round,
+} from '@/generated/prisma/client';
 import { tierForTotal } from '@/server/engine';
 import type { TierView } from '@/lib/views/catalogue';
 import type {
+  MyKongsiLineView,
   MyParticipationView,
   OpenRoundView,
   RoundDetailView,
@@ -11,7 +18,9 @@ import type {
 } from '@/lib/views/rounds';
 import type { Caller } from '@/server/platform/caller';
 import type { AppDeps } from '@/server/platform/deps';
+import { resolveClock } from '@/server/adapters/clock';
 import { AppError, forbidden, notFound } from '@/server/platform/errors';
+import { requireShopAccess } from '@/server/platform/permissions';
 import { UUID } from '@/server/platform/ids';
 import { activeTotals, priceForShop, roundTiers } from './quote';
 
@@ -135,6 +144,52 @@ export async function listOpenRounds(
   return views;
 }
 
+function participationView(p: Participation): MyParticipationView {
+  return {
+    id: p.id,
+    shopId: p.shopId,
+    quantity: p.quantity,
+    priceLimitSen: p.priceLimitSen,
+    status: p.status,
+    destinationType: p.destinationType,
+    pickupPointId: p.pickupPointId,
+    deliveryDate: p.deliveryDate,
+    joinedAt: p.joinedAt.toISOString(),
+    unitShippingSen: p.unitShippingSen,
+    startingAllInSen: p.startingAllInSen,
+    paidSen: p.paidSen,
+  };
+}
+
+/**
+ * "My Kongsi": the owner's own lines in rounds that are still open, newest first. Owners only;
+ * staff get 403 (they see no money).
+ */
+export async function listMyKongsiLines(
+  deps: AppDeps,
+  caller: Caller,
+  shopId: string,
+): Promise<MyKongsiLineView[]> {
+  requireShopAccess(caller, shopId, ['owner']);
+  const now = (await resolveClock(deps)).now();
+  const rows = await deps.prisma.participation.findMany({
+    where: { shopId, round: { status: 'open' } },
+    include: { round: { include: { product: true } } },
+    orderBy: [{ joinedAt: 'desc' }, { id: 'asc' }],
+  });
+  return rows.map((p) => ({
+    ...participationView(p),
+    roundId: p.roundId,
+    name: p.round.product.name,
+    shortName: p.round.product.shortName,
+    packDescription: p.round.product.packDescription,
+    unitName: p.round.product.unitName,
+    roundStatus: p.round.status,
+    cutoffAt: p.round.cutoffAt.toISOString(),
+    canCancel: p.status === 'active' && p.round.cutoffAt.getTime() > now.getTime(),
+  }));
+}
+
 export async function getRoundForCaller(
   deps: AppDeps,
   caller: Caller,
@@ -180,20 +235,7 @@ export async function getRoundForCaller(
         orderBy: { joinedAt: 'asc' },
       })
     : [];
-  const myParticipations: MyParticipationView[] = mine.map((p) => ({
-    id: p.id,
-    shopId: p.shopId,
-    quantity: p.quantity,
-    priceLimitSen: p.priceLimitSen,
-    status: p.status,
-    destinationType: p.destinationType,
-    pickupPointId: p.pickupPointId,
-    deliveryDate: p.deliveryDate,
-    joinedAt: p.joinedAt.toISOString(),
-    unitShippingSen: p.unitShippingSen,
-    startingAllInSen: p.startingAllInSen,
-    paidSen: p.paidSen,
-  }));
+  const myParticipations = mine.map(participationView);
   return {
     ...base,
     expectedReadyAt: round.expectedReadyAt.toISOString(),

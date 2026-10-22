@@ -30,7 +30,7 @@ export function nearestPickupPoint<P extends LatLng & { id: string }>(
   )[0];
 }
 
-function pointView(p: PickupPoint, from: LatLng | null): PickupPointView {
+export function pointView(p: PickupPoint, from: LatLng | null): PickupPointView {
   return {
     id: p.id,
     name: p.name,

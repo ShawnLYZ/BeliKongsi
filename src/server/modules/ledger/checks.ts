@@ -7,7 +7,8 @@ export type MoneyCheckId =
   | 'round_holds_match_participations'
   | 'participation_paid_equals_refunds_plus_allocated'
   | 'kept_within_limits'
-  | 'final_not_above_starting';
+  | 'final_not_above_starting'
+  | 'delivery_fee_holds_match_charges';
 
 type Failure = { roundId?: string; participationId?: string; detail: string };
 export type MoneyCheck = { id: MoneyCheckId; label: string; passed: boolean; failures: Failure[] };
@@ -156,6 +157,33 @@ async function finalNotAboveStarting(db: Db): Promise<Failure[]> {
   }));
 }
 
+/**
+ * Each delivery fee hold (one shop, one door delivery date) holds exactly its `held` charge, and
+ * nothing when the charge is missing, refunded or passed to the partner (PRD 6.9).
+ */
+async function feeHoldsMatchCharges(db: Db): Promise<Failure[]> {
+  const rows = await db.$queryRaw<
+    { shop_id: string; delivery_date: string; held: bigint; expected: bigint }[]
+  >`
+    WITH ids AS (
+      SELECT shop_id, delivery_date FROM ledger_accounts
+      WHERE kind = 'delivery_fee_hold' AND shop_id IS NOT NULL AND delivery_date IS NOT NULL
+      UNION SELECT shop_id, delivery_date FROM delivery_fee_charges
+    )
+    SELECT ids.shop_id, ids.delivery_date,
+      COALESCE((SELECT a.balance_sen FROM ledger_accounts a WHERE a.kind = 'delivery_fee_hold'
+        AND a.shop_id = ids.shop_id AND a.delivery_date = ids.delivery_date), 0)::bigint AS held,
+      COALESCE((SELECT c.amount_sen FROM delivery_fee_charges c WHERE c.shop_id = ids.shop_id
+        AND c.delivery_date = ids.delivery_date AND c.status = 'held'), 0)::bigint AS expected
+    FROM ids
+    ORDER BY ids.shop_id, ids.delivery_date`;
+  return rows
+    .filter((r) => r.held !== r.expected)
+    .map((r) => ({
+      detail: `The delivery fee hold for shop ${r.shop_id} on ${r.delivery_date} holds ${sen(r.held)} but its charge says ${sen(r.expected)}.`,
+    }));
+}
+
 export async function runMoneyChecks(db: Db): Promise<MoneyReport> {
   const defs: [MoneyCheckId, string, (db: Db) => Promise<Failure[]>][] = [
     ['balances_sum_to_zero', 'All account balances add up to zero', sumToZero],
@@ -176,6 +204,11 @@ export async function runMoneyChecks(db: Db): Promise<MoneyReport> {
       'final_not_above_starting',
       'The final price is never above the starting price',
       finalNotAboveStarting,
+    ],
+    [
+      'delivery_fee_holds_match_charges',
+      'Every delivery fee hold matches its held charge',
+      feeHoldsMatchCharges,
     ],
   ];
   const checks: MoneyCheck[] = [];

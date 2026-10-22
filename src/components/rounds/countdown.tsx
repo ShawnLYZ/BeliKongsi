@@ -37,7 +37,18 @@ export function timeLeft(ms: number): string {
  * The cut-off in Malaysia time and the time left. `serverNow` is the app's clock (which the demo
  * can move), so the countdown follows demo time rather than the device clock.
  */
-export function Countdown({ cutoffAt, serverNow }: { cutoffAt: string; serverNow: string }) {
+export function Countdown({
+  cutoffAt,
+  serverNow,
+  label = 'Cut-off',
+  passedText = 'Cut-off has passed',
+}: {
+  cutoffAt: string;
+  serverNow: string;
+  /** What the instant is, e.g. "Approve by" for a basket deadline. */
+  label?: string;
+  passedText?: string;
+}) {
   // Set once in the browser: how far the app's clock is from the device's.
   const [offset] = useState(() => Date.parse(serverNow) - Date.now());
   const now = useSyncExternalStore(subscribe, browserNow, noNowOnServer);
@@ -46,11 +57,13 @@ export function Countdown({ cutoffAt, serverNow }: { cutoffAt: string; serverNow
     <p className="flex flex-wrap items-center gap-x-2 text-base">
       <Clock aria-hidden="true" className="size-5 shrink-0" />
       <span>
-        Cut-off <time dateTime={cutoffAt}>{formatMyt(cutoff)}</time>
+        {label} <time dateTime={cutoffAt}>{formatMyt(cutoff)}</time>
       </span>
       {now !== null ? (
         <span className="w-full pl-7 font-semibold tabular-nums">
-          {timeLeft(cutoff.getTime() - (now + offset))}
+          {cutoff.getTime() - (now + offset) <= 0
+            ? passedText
+            : timeLeft(cutoff.getTime() - (now + offset))}
         </span>
       ) : null}
     </p>

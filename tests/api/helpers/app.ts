@@ -10,6 +10,7 @@ import { createFakeOrderReader } from '@/server/adapters/ai/fake';
 import { fixedClock, type MutableClock } from '@/server/adapters/clock';
 import { createLocalStorage } from '@/server/adapters/storage/local';
 import { simulatedLogistics } from '@/server/adapters/logistics';
+import { simulatedPayments } from '@/server/adapters/payments';
 import { systemCaller } from '@/server/platform/caller';
 import { createPrismaClient } from '@/server/platform/db';
 import { setDepsForTests, type AppDeps } from '@/server/platform/deps';
@@ -31,6 +32,7 @@ export async function createTestDeps(opts: { now?: string } = {}): Promise<{
     prisma,
     clock,
     logistics: simulatedLogistics,
+    payments: simulatedPayments,
     ai: createFakeOrderReader(),
     storage: createLocalStorage({
       dir: storageDir,

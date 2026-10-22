@@ -1,40 +1,14 @@
+import type { ShopSettingsView } from '@/lib/views/directory';
 import type { RoundDetailView } from '@/lib/views/rounds';
 import { ProductImage } from '@/components/catalogue/product-image';
-import { BUTTON_PRIMARY } from '@/components/common/controls';
 import { EmptyState } from '@/components/common/empty-state';
 import { Money } from '@/components/common/money';
 import { formatMyt, formatMytDate, formatUnits } from '@/lib/format';
 import { Countdown } from './countdown';
+import { JoinSheet } from './join-sheet';
 import { ProgressBar } from './progress-bar';
+import { statusWords } from './status-words';
 import { TierLadder } from './tier-ladder';
-
-// Plain English for round and participation statuses (PRD §22: no logistics jargon).
-const STATUS_LABELS: Record<string, string> = {
-  scheduled: 'Not open yet',
-  open: 'Open',
-  empty: 'Closed with no orders',
-  failed: 'Did not go ahead',
-  formed: 'Going ahead',
-  ordered: 'Ordered from the supplier',
-  confirmed: 'Confirmed by the supplier',
-  dispatched: 'On the way',
-  at_hub: 'At the hub',
-  completed: 'Completed',
-  cancelled: 'Cancelled',
-  active: 'Waiting for cut-off',
-  dropped_price_limit: 'Left out: the price went above your limit',
-  refunded_failed: 'Refunded: the round did not go ahead',
-  kept: 'Going ahead',
-  refunded_round_cancelled: 'Refunded: the round was cancelled',
-  allocated: 'Your goods are set aside',
-  shorted: 'Fewer goods than ordered',
-  received: 'Received',
-  closed: 'Closed',
-};
-
-function words(code: string): string {
-  return STATUS_LABELS[code] ?? code.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
-}
 
 /** A round's tiers, progress and this shop's own lines (PRD §22 "Round detail"). */
 export function RoundDetail({
@@ -42,11 +16,14 @@ export function RoundDetail({
   supplierName,
   category,
   serverNow,
+  settings,
 }: {
   round: RoundDetailView;
   supplierName: string | null;
   category: string;
   serverNow: string;
+  /** The shop's fulfilment settings, for the join sheet. */
+  settings: ShopSettingsView | null;
 }) {
   const open = round.status === 'open';
   return (
@@ -69,7 +46,7 @@ export function RoundDetail({
           ) : null}
         </div>
         <p className="text-base">
-          Round status: <span className="font-semibold">{words(round.status)}</span>
+          Round status: <span className="font-semibold">{statusWords(round.status)}</span>
         </p>
         {open ? (
           <>
@@ -136,22 +113,20 @@ export function RoundDetail({
                   {p.destinationType === 'door' ? 'Delivery to your door' : 'Pickup point'} ·{' '}
                   {formatMytDate(p.deliveryDate)}
                 </p>
-                <p className="text-muted-foreground text-base">Status: {words(p.status)}</p>
+                <p className="text-muted-foreground text-base">Status: {statusWords(p.status)}</p>
               </li>
             ))}
           </ul>
         )}
       </section>
 
-      {open ? (
-        <div className="flex flex-col gap-2">
-          <button type="button" className={BUTTON_PRIMARY} disabled aria-describedby="join-soon">
-            Join
-          </button>
-          <p id="join-soon" className="text-muted-foreground text-base">
-            Joining a round from here is coming soon.
-          </p>
-        </div>
+      {open && settings ? (
+        <JoinSheet
+          roundId={round.roundId}
+          productName={round.name}
+          unitName={round.unitName}
+          settings={settings}
+        />
       ) : null}
     </div>
   );

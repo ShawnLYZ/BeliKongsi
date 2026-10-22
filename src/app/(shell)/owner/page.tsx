@@ -1,27 +1,38 @@
 import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
+import type { OwnerBasketView } from '@/lib/views/baskets';
 import type { ShopSettingsView } from '@/lib/views/directory';
+import { BasketCard } from '@/components/baskets/basket-card';
 import { BUTTON_PRIMARY } from '@/components/common/controls';
 import { EmptyState } from '@/components/common/empty-state';
+import { resolveClock } from '@/server/adapters/clock';
+import { getCurrentBasket } from '@/server/modules/baskets/basket';
 import { getShopSettings } from '@/server/modules/directory/directory';
 import { personCaller } from '@/server/platform/caller';
 import { getDeps } from '@/server/platform/deps';
+import { scheduleDueWork } from '@/server/platform/due-work';
 import { requireOwnerShop } from '@/server/platform/page-auth';
 import { getPageSession } from '@/server/platform/session-page';
 
 const LINKS = [
+  { href: '/owner/basket', label: "This week's basket" },
   { href: '/owner/rounds', label: 'Open Kongsi rounds' },
+  { href: '/owner/kongsi', label: 'My Kongsi' },
+  { href: '/owner/money', label: 'Money history' },
   { href: '/owner/usual-list', label: 'Your usual list' },
   { href: '/owner/settings', label: 'Settings' },
 ] as const;
 
 export default async function OwnerHomePage() {
   const { session, shopId } = requireOwnerShop(await getPageSession());
-  const settings = (await getShopSettings(
-    getDeps(),
-    personCaller(session),
-    shopId,
-  )) as ShopSettingsView;
+  const deps = getDeps();
+  scheduleDueWork(deps);
+  const caller = personCaller(session);
+  const [settings, basket, clock] = await Promise.all([
+    getShopSettings(deps, caller, shopId) as Promise<ShopSettingsView>,
+    getCurrentBasket(deps, caller, shopId) as Promise<OwnerBasketView | null>,
+    resolveClock(deps),
+  ]);
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-2xl font-bold">{session.membership.orgName}</h1>
@@ -37,11 +48,15 @@ export default async function OwnerHomePage() {
           </Link>
         </section>
       ) : null}
-      <EmptyState
-        title="This week's basket"
-        explanation="Your weekly basket appears here every Monday at 6 am."
-        example="5 items, RM 1,630.20."
-      />
+      {basket ? (
+        <BasketCard basket={basket} serverNow={clock.now().toISOString()} />
+      ) : (
+        <EmptyState
+          title="This week's basket"
+          explanation="Your weekly basket appears here every Monday at 6 am."
+          example="5 items, RM 1,630.20."
+        />
+      )}
       <EmptyState
         title="Next pickup"
         explanation="Once you have paid, where and when to collect your goods appears here, with your pickup code."

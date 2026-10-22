@@ -94,3 +94,16 @@ export interface StaffRoundDetailView {
   cutoffAt: string;
   nextRoundCutoffAt: string | null;
 }
+
+/** One of the owner's own round lines on "My Kongsi". */
+export interface MyKongsiLineView extends MyParticipationView {
+  roundId: string;
+  name: string;
+  shortName: string;
+  packDescription: string;
+  unitName: string;
+  roundStatus: string;
+  cutoffAt: string;
+  /** Active, in an open round, before its cut-off: the owner may cancel it for a full refund. */
+  canCancel: boolean;
+}

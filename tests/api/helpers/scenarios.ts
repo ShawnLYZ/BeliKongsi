@@ -1,0 +1,114 @@
+import { PRODUCTS } from '../../../prisma/seed/catalogue';
+import { seedId, type SeedUserKey } from '../../../prisma/seed/ids';
+import { SAMPLE_USUAL_PRICES_SEN } from '../../../prisma/seed/sample-order';
+import type { PaymentSummary } from '@/lib/views/payments';
+import { getDeps } from '@/server/platform/deps';
+import type { TestApp } from './app';
+
+const p = (key: string) => seedId('product', key);
+const productKeyOf = new Map(PRODUCTS.map((x, i) => [p(x.key), { key: x.key, order: i }]));
+
+/**
+ * Kedai Kopi Contoh finishes setup: Ipoh pickup point, then the usual list from the sample order
+ * (`CM` 6, `OIL` 2, `EGG_A` 10, `COFFEE` 1, `CUPS` 2) at the sample prices.
+ */
+export async function setupKedaiKopi(app: TestApp): Promise<{ shopId: string }> {
+  const shopId = seedId('shop', 'KEDAI_KOPI');
+  const owner = await app.as('ahSeng');
+  const settings = await owner.patch(`/api/shops/${shopId}/settings`, {
+    defaultFulfilment: 'pickup',
+    pickupPointId: seedId('pickup_point', 'PP_IPOH'),
+  });
+  if (settings.status !== 200) throw new Error(`settings failed: ${settings.status}`);
+  const prices = SAMPLE_USUAL_PRICES_SEN;
+  const saved = await owner.put(`/api/shops/${shopId}/usual-list`, {
+    items: [
+      { productId: p('CM'), quantity: 6, usualPriceSen: prices.CM },
+      { productId: p('OIL'), quantity: 2, usualPriceSen: prices.OIL },
+      { productId: p('EGG_A'), quantity: 10, usualPriceSen: prices.EGG_A },
+      { productId: p('COFFEE'), quantity: 1, usualPriceSen: prices.COFFEE },
+      { productId: p('CUPS'), quantity: 2, usualPriceSen: prices.CUPS },
+    ],
+  });
+  if (saved.status !== 200) throw new Error(`usual list failed: ${saved.status}`);
+  return { shopId };
+}
+
+/** The id of a shop's basket for an ISO week, or undefined when it has none. */
+export async function basketIdOf(shopKey: string, week: string): Promise<string | undefined> {
+  const row = await getDeps().prisma.weeklyBasket.findUnique({
+    where: { shopId_basketWeek: { shopId: seedId('shop', shopKey), basketWeek: week } },
+    select: { id: true },
+  });
+  return row?.id;
+}
+
+/** A shop's basket for an ISO week with its lines, each carrying its `productKey`, in catalogue order. */
+export async function basketOf(shopKey: string, week: string) {
+  const basket = await getDeps().prisma.weeklyBasket.findUniqueOrThrow({
+    where: { shopId_basketWeek: { shopId: seedId('shop', shopKey), basketWeek: week } },
+    include: { lines: true },
+  });
+  const lines = basket.lines
+    .map((l) => ({ ...l, productKey: productKeyOf.get(l.productId)!.key }))
+    .sort((a, b) => productKeyOf.get(a.productId)!.order - productKeyOf.get(b.productId)!.order);
+  return { ...basket, lines };
+}
+
+/**
+ * The owner approves the basket and, unless the balance covered it, pays on the simulated
+ * checkout with DuitNow QR. Returns the approval's summary with the final status.
+ */
+export async function payBasket(
+  app: TestApp,
+  userKey: SeedUserKey,
+  basketId: string,
+): Promise<PaymentSummary> {
+  const owner = await app.as(userKey);
+  const approved = await owner.post(`/api/baskets/${basketId}/approve`, undefined, {
+    'idempotency-key': `pay-basket-${basketId}`,
+  });
+  if (approved.status !== 200) throw new Error(`approve failed: ${approved.status}`);
+  const summary = approved.body as PaymentSummary;
+  if (summary.status === 'succeeded') return summary;
+  const paid = await owner.post(`/api/payments/${summary.paymentId}/simulate`, {
+    outcome: 'succeeded',
+    method: 'duitnow_qr',
+  });
+  if (paid.status !== 200 || paid.body.status !== 'succeeded') {
+    throw new Error(`simulated payment failed: ${paid.status}`);
+  }
+  return { ...summary, status: 'succeeded', checkoutUrl: null };
+}
+
+/** A shop's latest participation in a round of the product. Throws when it has none. */
+export async function participationOf(shopKey: string, productKey: string) {
+  return getDeps().prisma.participation.findFirstOrThrow({
+    where: { shopId: seedId('shop', shopKey), round: { productId: p(productKey) } },
+    orderBy: [{ joinedAt: 'desc' }, { id: 'desc' }],
+  });
+}
+
+/** A shop's delivery fee charge for a door delivery date (`YYYY-MM-DD`), or null when it has none. */
+export async function feeChargeOf(shopKey: string, date: string) {
+  return getDeps().prisma.deliveryFeeCharge.findUnique({
+    where: { shopId_deliveryDate: { shopId: seedId('shop', shopKey), deliveryDate: date } },
+  });
+}
+
+/** Active units in each product's open round, keyed by product key (0 for an empty round). */
+export async function totalsByProductKey(app: TestApp): Promise<Record<string, number>> {
+  const totals: Record<string, number> = {};
+  for (const product of PRODUCTS) {
+    const round = await app.prisma.round.findFirstOrThrow({
+      where: { productId: p(product.key), status: 'open' },
+      select: { id: true },
+    });
+    const sum = await app.prisma.participation.aggregate({
+      where: { roundId: round.id, status: 'active' },
+      _sum: { quantity: true },
+    });
+    totals[product.key] = sum._sum.quantity ?? 0;
+  }
+  return totals;
+}

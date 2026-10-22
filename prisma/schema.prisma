@@ -461,6 +461,7 @@ model WeeklyBasket {
   approvedByUserId  String?      @map("approved_by_user_id") @db.Uuid
   skipReason        String?      @map("skip_reason")
   firstOpenedAt     DateTime?    @map("first_opened_at") @db.Timestamptz
+  draftedAt         DateTime?    @map("drafted_at") @db.Timestamptz
   approvalRequestId String?      @map("approval_request_id") @db.Uuid
   createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz
   lines             BasketLine[]
@@ -474,7 +475,7 @@ model BasketLine {
   basketId           String       @map("basket_id") @db.Uuid
   basket             WeeklyBasket @relation(fields: [basketId], references: [id])
   productId          String       @map("product_id") @db.Uuid
-  roundId            String       @map("round_id") @db.Uuid
+  roundId            String?      @map("round_id") @db.Uuid
   quantity           Int
   priceLimitSen      Int?         @map("price_limit_sen")
   source             LineSource
@@ -496,6 +497,8 @@ model Payment {
   basketId          String?        @map("basket_id") @db.Uuid
   linesTotalSen     Int            @map("lines_total_sen")
   deliveryFeeSen    Int            @map("delivery_fee_sen")
+  /// The door delivery dates whose fee this payment carries; each carries an equal share.
+  deliveryFeeDates  String[]       @default([]) @map("delivery_fee_dates")
   totalSen          Int            @map("total_sen")
   balanceAppliedSen Int            @map("balance_applied_sen")
   externalSen       Int            @map("external_sen")

@@ -77,7 +77,8 @@ describe('catalogue search', () => {
         { position: 3 },
       ],
       imageUrl: expect.stringMatching(/cm.webp$/),
-      openRound: { roundId: cmRound, totalQuantity: 0, shopCount: 0, currentTier: null },
+      // The seeded week: 6 background shops, Gerai and Kafe (index §5.7).
+      openRound: { roundId: cmRound, totalQuantity: 99, shopCount: 8, currentTier: 2 },
     });
   });
 
@@ -89,36 +90,42 @@ describe('catalogue search', () => {
 
 describe('round progress', () => {
   it('counts active units and shops for round progress', async () => {
+    // The seeded week leaves the KRAFT round empty (index §5.7); its tiers are 10, 25 and 50.
+    const kraftRound = (
+      await app.prisma.round.findFirstOrThrow({
+        where: { productId: seedId('product', 'KRAFT'), status: 'open' },
+      })
+    ).id;
     const shops = await app.prisma.shop.findMany({ take: 8, orderBy: { id: 'asc' } });
     expect(shops).toHaveLength(8);
-    // Eight shops with 11 cartons each, one of them with a second row of 11 (99 in all).
+    // Eight shops with 5 cartons each, one of them with a second row of 5 (45 in all).
     for (const shop of shops) {
       await insertParticipation(app.prisma, {
-        roundId: cmRound,
+        roundId: kraftRound,
         shopId: shop.id,
-        quantity: 11,
+        quantity: 5,
         unitShippingSen: 293,
       });
     }
     await insertParticipation(app.prisma, {
-      roundId: cmRound,
+      roundId: kraftRound,
       shopId: shops[7]!.id,
-      quantity: 11,
+      quantity: 5,
       unitShippingSen: 293,
     });
     await insertParticipation(app.prisma, {
-      roundId: cmRound,
+      roundId: kraftRound,
       shopId: shops[0]!.id,
       quantity: 50,
       unitShippingSen: 293,
       status: 'cancelled',
     });
-    expect(await roundProgress(app.prisma, cmRound)).toEqual({
-      totalQuantity: 99,
+    expect(await roundProgress(app.prisma, kraftRound)).toEqual({
+      totalQuantity: 45,
       shopCount: 8,
       currentTier: 2,
-      unitsToNextTier: 1,
-      nextTierUnitPriceSen: 14600,
+      unitsToNextTier: 5,
+      nextTierUnitPriceSen: 10000,
     });
   });
 });
@@ -138,19 +145,14 @@ describe('round detail', () => {
       quantity: 13,
       unitShippingSen: 293,
     });
-    await insertParticipation(app.prisma, {
-      roundId: cmRound,
-      shopId: gerai,
-      quantity: 4,
-      unitShippingSen: 429,
-    });
+    // Gerai's own CM line (4 cartons) and the background shops' lines come from the seeded week.
     const res = await (await app.as('siti')).get(`/api/rounds/${cmRound}`);
     expect(res.status).toBe(200);
     const s = JSON.stringify(res.body);
     expect(s).not.toMatch(/Kafe Contoh|Kedai Kopi Contoh|Kopitiam Contoh/);
     expect(res.body.myParticipations).toHaveLength(1);
     expect(res.body.myParticipations.every((p: any) => p.shopId === gerai)).toBe(true);
-    expect(res.body.progress).toMatchObject({ totalQuantity: 24, shopCount: 3 });
+    expect(res.body.progress).toMatchObject({ totalQuantity: 119, shopCount: 9 });
   });
 
   it('says when the next round closes after a missed cut-off (story 50)', async () => {
@@ -172,7 +174,8 @@ describe('round detail', () => {
     expect(cm.myPrice).toMatchObject({
       unitShippingSen: 293,
       startingAllInSen: 16409,
-      projectedAllInSen: null,
+      // The seeded 99 cartons put the round at tier 2: 15200 + 304 + 293.
+      projectedAllInSen: 15797,
     });
     const staff = await (await app.as('rahim')).get('/api/rounds');
     expect(staff.body.items).toHaveLength(12);

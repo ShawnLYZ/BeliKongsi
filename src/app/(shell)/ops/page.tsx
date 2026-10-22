@@ -1,9 +1,12 @@
 import { EmptyState } from '@/components/common/empty-state';
+import { getDeps } from '@/server/platform/deps';
+import { scheduleDueWork } from '@/server/platform/due-work';
 import { requirePageRole } from '@/server/platform/page-auth';
 import { getPageSession } from '@/server/platform/session-page';
 
 export default async function OpsHomePage() {
   requirePageRole(await getPageSession(), ['ops']);
+  scheduleDueWork(getDeps());
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-2xl font-bold">Operations</h1>

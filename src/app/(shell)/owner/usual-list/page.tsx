@@ -5,11 +5,13 @@ import { UsualListEditor } from '@/components/usual-list/usual-list-editor';
 import { getUsualList } from '@/server/modules/usual-list/usual-list';
 import { personCaller } from '@/server/platform/caller';
 import { getDeps } from '@/server/platform/deps';
+import { scheduleDueWork } from '@/server/platform/due-work';
 import { requireOwnerShop } from '@/server/platform/page-auth';
 import { getPageSession } from '@/server/platform/session-page';
 
 export default async function OwnerUsualListPage() {
   const { session, shopId } = requireOwnerShop(await getPageSession());
+  scheduleDueWork(getDeps());
   const list = await getUsualList(getDeps(), personCaller(session), shopId);
   return (
     <div className="flex flex-col gap-4">
