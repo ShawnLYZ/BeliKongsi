@@ -2,6 +2,7 @@ import type { PostingKind, Prisma } from '@/generated/prisma/client';
 import { resolveClock } from '@/server/adapters/clock';
 import { closeRound, type CloseOutcome, type CloseRoundResult, type Tier } from '@/server/engine';
 import { appendLog } from '@/server/modules/activity/log';
+import { freePickupsOf } from '@/server/modules/fulfilment/plan';
 import { notify, TEMPLATES } from '@/server/modules/notifications/notify';
 import { emitEvent } from '@/server/modules/integration/events';
 import { post } from '@/server/modules/ledger/post';
@@ -87,11 +88,17 @@ export async function closeRoundById(
         ? a.deliveryDate.localeCompare(b.deliveryDate)
         : a.shopId.localeCompare(b.shopId),
     );
-    // Every shop this close posts to (a refund, or a delivery fee back) is locked now, in id order,
-    // before any posting: the payments lock order is round, shop, then accounts (see lockRounds).
+    // Lines this close does not keep no longer hold back their shop's pickups (C4 gate 1).
+    const released = result.participants
+      .filter((r) => r.outcome !== 'kept')
+      .map((r) => byId.get(r.id)!);
+    // Every shop this close posts to (a refund, or a delivery fee back) or whose pickups it may
+    // free is locked now, in id order, before any posting: the payments lock order is round,
+    // shop, then accounts (see lockRounds); destinations come after the shops.
     const postedShops = new Set([
       ...result.participants.filter((r) => r.refundSen > 0).map((r) => byId.get(r.id)!.shopId),
       ...feeDates.map((p) => p.shopId),
+      ...released.map((p) => p.shopId),
     ]);
     for (const shopId of [...postedShops].sort()) await lockShop(ctx, shopId);
 
@@ -166,6 +173,7 @@ export async function closeRoundById(
 
     // 5. Delivery fees that no door line heading for that date needs any more (PRD 6.9).
     for (const p of feeDates) await refundDeliveryFeeIfUnused(ctx, p.shopId, p.deliveryDate);
+    await freePickupsOf(ctx, released);
 
     // 6. The round's result.
     await tx.round.update({

@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { FastForward, FlaskConical, RotateCcw, X } from 'lucide-react';
+import { FastForward, FlaskConical, RotateCcw, Truck, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { ApiError, apiFetch } from '@/components/common/api-client';
 import { formatMyt } from '@/lib/format';
@@ -13,15 +13,17 @@ const PRIMARY = `${ACTION} bg-primary text-primary-foreground hover:bg-primary-h
 const SECONDARY = `${ACTION} border-input/50 bg-card hover:bg-muted border-2`;
 
 /**
- * Demo controls, shown only in demo mode. M2 has "Reset demo data"; M5 adds "Skip to cut-off"
- * (after a confirmation) and M7 "Complete other rounds".
+ * Demo controls, shown only in demo mode. M2 has "Reset demo data"; M5 adds "Skip to cut-off" and
+ * M7 "Complete other rounds" (each after a confirmation).
  */
 export function DemoMenu() {
   const dialog = useRef<HTMLDialogElement>(null);
   const router = useRouter();
-  const [busy, setBusy] = useState<'reset' | 'skip' | null>(null);
+  const [busy, setBusy] = useState<'reset' | 'skip' | 'complete' | null>(null);
   const [confirmingSkip, setConfirmingSkip] = useState(false);
   const [skipError, setSkipError] = useState<string | null>(null);
+  const [confirmingComplete, setConfirmingComplete] = useState(false);
+  const [completeError, setCompleteError] = useState<string | null>(null);
   const working = busy !== null;
 
   const close = () => dialog.current?.close();
@@ -44,6 +46,29 @@ export function DemoMenu() {
         error instanceof ApiError ? error.message : 'Something went wrong. Please try again.',
       );
       setConfirmingSkip(false);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function completeOtherRounds() {
+    setBusy('complete');
+    setCompleteError(null);
+    try {
+      const r = await apiFetch<{ rounds: number; consignmentsMoved: number }>(
+        '/api/demo/complete-other-rounds',
+        { method: 'POST', quiet: true },
+      );
+      toast.success(
+        `${r.rounds} other ${r.rounds === 1 ? 'round' : 'rounds'} completed. ${r.consignmentsMoved} ${r.consignmentsMoved === 1 ? 'consignment' : 'consignments'} moved on.`,
+      );
+      close();
+      router.refresh();
+    } catch (error) {
+      setCompleteError(
+        error instanceof ApiError ? error.message : 'Something went wrong. Please try again.',
+      );
+      setConfirmingComplete(false);
     } finally {
       setBusy(null);
     }
@@ -84,6 +109,8 @@ export function DemoMenu() {
         onClose={() => {
           setConfirmingSkip(false);
           setSkipError(null);
+          setConfirmingComplete(false);
+          setCompleteError(null);
         }}
         onCancel={(e) => {
           if (working) e.preventDefault();
@@ -159,6 +186,67 @@ export function DemoMenu() {
                 >
                   <FastForward aria-hidden className="size-5" />
                   Skip to cut-off
+                </button>
+              </>
+            )}
+          </section>
+          <section
+            aria-labelledby="demo-complete-title"
+            className="flex flex-col gap-3 border-t pt-4"
+          >
+            <h3 id="demo-complete-title" className="text-base font-semibold">
+              Complete other rounds
+            </h3>
+            {confirmingComplete ? (
+              <>
+                <p className="text-base" id="demo-complete-confirm">
+                  Play the suppliers, the hub and the logistics partner for every round except the
+                  one you are following? Their orders are confirmed, dispatched and hub-checked, and
+                  their consignments move on. Only &ldquo;Reset demo data&rdquo; undoes it.
+                </p>
+                <div className="flex flex-col gap-2">
+                  <button
+                    type="button"
+                    onClick={completeOtherRounds}
+                    disabled={working}
+                    aria-describedby="demo-complete-confirm"
+                    className={PRIMARY}
+                  >
+                    <Truck aria-hidden className="size-5" />
+                    {busy === 'complete' ? 'Completing rounds…' : 'Yes, complete other rounds'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmingComplete(false)}
+                    disabled={working}
+                    className={SECONDARY}
+                  >
+                    Go back
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-base">
+                  Moves every other closed round through ordering, dispatch and the hub check, so
+                  the goods of the whole week reach the pickup points together.
+                </p>
+                {completeError ? (
+                  <p role="alert" className="text-destructive text-base font-medium">
+                    {completeError}
+                  </p>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCompleteError(null);
+                    setConfirmingComplete(true);
+                  }}
+                  disabled={working}
+                  className={SECONDARY}
+                >
+                  <Truck aria-hidden className="size-5" />
+                  Complete other rounds
                 </button>
               </>
             )}

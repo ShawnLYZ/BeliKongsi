@@ -208,3 +208,86 @@ export async function allShopIds(): Promise<string[]> {
   const rows = await getDeps().prisma.shop.findMany({ select: { id: true } });
   return rows.map((r) => r.id);
 }
+
+const SUPPLIER_USER: Record<string, SeedUserKey> = {
+  SUP_DRY: 'farid',
+  SUP_EGG: 'lim',
+  SUP_PACK: 'priya',
+};
+
+/**
+ * Takes the named W45 rounds through Ops approval, supplier confirmation, dispatch and the hub
+ * check (every accepted unit good unless `goodUnits` says otherwise). Runs `toFormed` first when
+ * the demo has not reached the cut-off yet, so it can be called again for further rounds.
+ */
+export async function toHubChecked(
+  app: TestApp,
+  productKeys: string[],
+  opts: { goodUnits?: number } = {},
+): Promise<void> {
+  const first = await roundOf(productKeys[0]!, '2026-W45');
+  const formed = await getDeps().prisma.supplierOrder.findUnique({ where: { roundId: first.id } });
+  if (!formed) await toFormed(app);
+  const nadia = await app.as('nadia');
+  for (const key of productKeys) {
+    const so = await supplierOrderOf((await roundOf(key, '2026-W45')).id);
+    const supplierKey = PRODUCTS.find((x) => x.key === key)!.supplier;
+    const supplier = await app.as(SUPPLIER_USER[supplierKey]!);
+    const ops = await nadia.post(`/api/approvals/${await opsApprovalOf(so.id)}/approve`, {});
+    if (ops.status !== 200) throw new Error(`Ops approval of ${key} failed: ${ops.status}`);
+    const sup = await supplier.post(`/api/approvals/${await supplierApprovalOf(so.id)}/approve`, {
+      expectedDispatchDate: '2026-11-07',
+    });
+    if (sup.status !== 200) throw new Error(`supplier approval of ${key} failed: ${sup.status}`);
+    const sent = await supplier.post(`/api/supplier-orders/${so.id}/dispatched`);
+    if (sent.status !== 200) throw new Error(`dispatch of ${key} failed: ${sent.status}`);
+    const checked = await nadia.post(`/api/supplier-orders/${so.id}/hub-check`, {
+      goodUnits: opts.goodUnits ?? so.acceptedQuantity,
+      damagedUnits: 0,
+    });
+    if (checked.status !== 200) throw new Error(`hub check of ${key} failed: ${checked.status}`);
+  }
+}
+
+/**
+ * The consignment from a hub (seed key) to a destination key on a delivery date: the given wave,
+ * else the latest one. Throws when there is none.
+ */
+export async function consignmentFor(where: {
+  hub: string;
+  destinationKey: string;
+  deliveryDate: string;
+  wave?: number;
+}) {
+  return getDeps().prisma.consignment.findFirstOrThrow({
+    where: {
+      hubId: seedId('hub', where.hub),
+      destinationKey: where.destinationKey,
+      deliveryDate: where.deliveryDate,
+      ...(where.wave === undefined ? {} : { wave: where.wave }),
+    },
+    orderBy: { wave: 'desc' },
+  });
+}
+
+/** A shop's pickup for a delivery date (`YYYY-MM-DD`). Throws when it has none. */
+export async function pickupOf(shopKey: string, deliveryDate: string) {
+  return getDeps().prisma.pickup.findFirstOrThrow({
+    where: { shopId: seedId('shop', shopKey), deliveryDate },
+    orderBy: { createdAt: 'asc' },
+  });
+}
+
+/** The allocation of a shop's latest participation in a product's rounds. Throws when it has none. */
+export async function allocationOf(shopKey: string, productKey: string) {
+  const part = await participationOf(shopKey, productKey);
+  return getDeps().prisma.allocation.findUniqueOrThrow({ where: { participationId: part.id } });
+}
+
+/** Nadia (Ops) moves a consignment to a status through the API. Throws unless it answers 200. */
+export async function moveConsignment(app: TestApp, consignmentId: string, status: string) {
+  const nadia = await app.as('nadia');
+  const res = await nadia.post(`/api/consignments/${consignmentId}/status`, { status });
+  if (res.status !== 200) throw new Error(`moving consignment to ${status} failed: ${res.status}`);
+  return res.body;
+}

@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash } from 'node:crypto';
 import { Prisma, type PrismaClient } from '@/generated/prisma/client';
 import type { TxContext } from '@/server/platform/tx';
@@ -23,6 +24,17 @@ export type LogEntryInput = {
 };
 
 export const GENESIS_HASH = '0'.repeat(64);
+
+const scopedReason = new AsyncLocalStorage<string>();
+
+/**
+ * Runs `fn` with a default log reason: every entry appended inside it (in any transaction it
+ * starts or joins) that gives no reason of its own gets this one. The demo simulation uses it so
+ * each step it drives through the ordinary handlers is logged as "Demo simulation".
+ */
+export function withLogReason<T>(reason: string, fn: () => Promise<T>): Promise<T> {
+  return scopedReason.run(reason, fn);
+}
 
 type HashedFields = {
   seq: bigint;
@@ -92,7 +104,7 @@ export async function appendLog(
     subjectId: entry.subjectId,
     before: entry.before ?? null,
     after: entry.after ?? null,
-    reason: entry.reason ?? null,
+    reason: entry.reason ?? scopedReason.getStore() ?? null,
     aiMetadata: entry.aiMetadata ?? null,
   };
   const hash = entryHash(head.last_hash, fields);

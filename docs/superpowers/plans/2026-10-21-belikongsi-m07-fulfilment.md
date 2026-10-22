@@ -61,7 +61,7 @@
 - Modify:
   - `src/server/modules/supplier-orders/hub-check.ts`: call `planConsignmentsAndPickups`.
   - `src/server/modules/notifications/templates.ts`: `pickup.ready`, `pickup.out_for_delivery`, `pickup.delivered`.
-  - `tests/api/helpers/scenarios.ts`: add `toHubChecked(app, productKeys)`, `consignmentFor`, `pickupOf`, `allocationOf`, `moveConsignment`.
+  - `tests/api/helpers/scenarios.ts`: add `toHubChecked(app, productKeys)`, `consignmentFor`, `pickupOf`, `allocationOf`, `moveConsignment`. Existing helpers (`toFormed(app)`, `roundOf`, `feeChargeOf`, `lastWhatsapp`, `participationOf`, `opsApprovalOf`, `supplierApprovalOf`, `supplierOrderOf`) read through the module-level `getDeps()`. Only the ones that sign in or pay (`toFormed`, `setupKedaiKopi`, `payBasket`) take `app`, so the new lookup helpers take no `app`; `toHubChecked(app, …)` and `moveConsignment` (it signs in as `nadia`) do take it. `toHubChecked` follows the `beforeEach` of `tests/api/hub-check.test.ts`: approve with `POST /api/approvals/:id/approve {}` as `nadia`, `POST /api/approvals/:id/approve { expectedDispatchDate: '2026-11-07' }` and `POST /api/supplier-orders/:id/dispatched` as `farid`, then `POST /api/supplier-orders/:id/hub-check`. Seed keys: hubs `HUB_KV`, `HUB_JOHOR`; pickup points `PP_IPOH`, `PP_JB`, `PP_KUANTAN`, `PP_PJ`, `PP_SEREMBAN`, `PP_MELAKA`; shops `KEDAI_KOPI`, `GERAI` (door), `KAFE`, background `BG01`…`BG40` (`BGnn` is at the pickup point `(nn-1) mod 6` in that order, so `BG01` is at Ipoh; every fifth is door).
 - Test: `tests/api/fulfilment-plan.test.ts`
 
 **Interfaces:**
@@ -69,17 +69,17 @@
 - Produces:
   - `destinationKeyOf(p: { destinationType: DestinationType; pickupPointId: string | null; shopId: string }): string`. It returns `pp:<pickupPointId>` for a pickup point and `door:<shopId>` for door delivery.
   - `planConsignmentsAndPickups(ctx, roundId): Promise<{ consignmentIds: string[]; pickupIds: string[] }>`. For each allocation with `allocated > 0`:
-    - It joins the `planned` consignment for (hub, destination key, delivery date), or creates the next wave (C3) with a `SIM-LOG-…` reference and logs `fulfilment.consignment_created`.
-    - It joins or creates the shop's pickup for (destination key, date), with status `waiting`.
-    - Shorted participations get no consignment, and `refundDeliveryFeeIfUnused` runs for them.
-  - `newPickupCode(ctx, destinationKey): Promise<string>`: 6 random digits from `crypto.randomInt`, retried on the partial unique index.
+    - It joins the `planned` consignment for (hub, destination key, delivery date), or creates the next wave (C3; unique on `hubId, destinationKey, deliveryDate, wave`) with `partnerReference = ctx.deps.logistics.newConsignmentReference()` (`SIM-` plus 8 hex characters, not `SIM-LOG-…`), `statusHistory = [{ status: 'planned', at, actor }]`, `shopId` set for a door consignment (null for a pickup point), and logs `fulfilment.consignment_created`.
+    - It joins or creates the shop's pickup for (destination key, date), with status `waiting`, and sets both `allocation.consignmentId` and `allocation.pickupId` (neither column has a foreign key; M6 creates the allocation rows with both null before the extension point).
+    - Shorted participations (status `shorted`, `allocated = 0`) get no consignment, and `refundDeliveryFeeIfUnused` runs for them. M6 has already set their status inside the same transaction, and `refundDeliveryFeeIfUnused(ctx, shopId, deliveryDate)` counts only `active/kept/allocated/received/closed` as heading for delivery, so the order is safe.
+  - `newPickupCode(ctx, destinationKey): Promise<string>`: 6 random digits from `crypto.randomInt(0, 1_000_000)` zero-padded. The partial unique index `pickups_open_code_per_destination` (`destination_key, code WHERE status <> 'closed'`) already exists. Do NOT retry by catching the unique violation: that aborts the whole Postgres transaction. Instead read the codes of the destination's non-`closed` pickups first, and draw again while the code is in that set (the test stubs `randomInt` to return an existing code first).
   - `refreshPickupReadiness(ctx, pickupIds: string[]): Promise<void>`, the C4 rule:
-    - **Gate 1:** no participation of that shop, destination key and date is `active` or `kept`.
+    - **Gate 1:** no participation of that shop, destination key and date is `active` or `kept` (after a hub check a round's participations are `allocated` or `shorted`, so only rounds not yet hub-checked hold a pickup back).
     - **Gate 2:** every consignment carrying its allocations is `arrived` (for a pickup point), or `out_for_delivery`/`delivered` (for door).
     - **When both gates hold:**
       - a pickup-point pickup becomes `ready`, with `readyAt`; it notifies owner and staff with `pickup.ready`, logs `fulfilment.pickup_ready` and emits `pickup.ready { pickupId, shopId, destinationType, deliveryDate }`
       - a door pickup becomes `out_for_delivery`, and later `delivered`, with the matching notices
-  - Notice texts:
+  - Notice texts. A template is declared in `src/server/modules/notifications/templates.ts` inside `defineTemplates({...})` as `'type': (data: {...}) => (role: Role) => ({ title, body, whatsappText })`, and is called as `notify(ctx, { type, audience: { shopId, roles: ['owner', 'staff'] }, link, message: TEMPLATES['type'](data), dedupeKey })` (import `notify, TEMPLATES` from `notifications/notify`). Staff text must not match `RM\s?\d`, and WhatsApp text is at most 300 characters.
     - `pickup.ready`: `Ready at {pickup point name} ({openingHours}). Pickup code {formatPickupCode(code)}.`
     - `pickup.out_for_delivery`: `Your goods are out for delivery today. Have code {formatPickupCode(code)} ready.`
     - `pickup.delivered`: `Your goods were delivered. Please check them now.`
@@ -143,6 +143,8 @@ it('logs consignment creation by the system', async () => {
     - It logs `fulfilment.consignment_status_changed` and emits `consignment.status_changed { consignmentId, hubId, destinationType, destinationId, status }`.
   - `listConsignments(deps, caller, { status? }): Promise<ConsignmentView[]>` (Ops).
     - `ConsignmentView = { consignmentId; hubName; hubLatLng; destinationType; destinationName; destinationLatLng; deliveryDate; wave; status; statusHistory; itemCount; containsFeaturedRound: boolean; partnerReference }`
+    - `containsFeaturedRound` is computed, not stored (`Round` has no featured flag): the feature is `DemoSettings.featuredProductId` (read through `getDemoState(deps).featuredRoundId` in `modules/demo/demo.ts`, the open round of that product, else its latest). A consignment contains it when any allocation linked by `consignmentId` belongs to a participation of that round.
+    - The event types `consignment.status_changed`, `pickup.ready` and `pickup.collected` and the action codes `fulfilment.*` and `demo.complete_other_rounds` already exist in `EventType` and `ACTIONS`; nothing to add. Event data keys must not match `/name|phone|email|address/`. The ledger kind `delivery_fee_to_partner` and the accounts `delivery_fee_hold { shopId, deliveryDate }` and `logistics_payable` also exist; take the shop lock (`lockShop` from `payments/fee`) before the posting, as `refundDeliveryFeeIfUnused` does.
 
 - [ ] **Step 1: Write the failing tests:**
 
@@ -195,7 +197,7 @@ it('tells a door shop when its goods are out for delivery (story 72)', async () 
 **Interfaces:**
 
 - Produces: `runBackgroundAutomation(ctx, pickupIds: string[]): Promise<number>`.
-  - For background shops' pickups that are `ready` or `delivered`: mark them collected (or delivered), with `systemCaller('background shop simulation')`.
+  - For background shops' (`Shop.isBackground`) pickups that are `ready` (pickup point) or `out_for_delivery` (door): mark them `collected` or `delivered`, with `systemCaller('background shop simulation')`. A `PickupStatus.delivered` pickup is already final, so `delivered` is the result here, not an input.
   - M8 extends this function with the automatic "All received" check.
 
 - [ ] **Step 1: Write the failing test:**
@@ -285,10 +287,11 @@ it("hides another shop's pickups", async () => {
 
 **Interfaces:**
 
-- Produces: `completeOtherRounds(deps, caller): Promise<{ rounds: number; consignmentsMoved: number }>`. Demo mode only (404 `DEMO_OFF`). As `systemCaller('Demo simulation')`, for every `formed` round except the featured one:
-  1. Approve the `supplier_order` approval.
-  2. Approve the `supplier_confirmation` approval with `expectedDispatchDate = requiredDispatchDate`.
-  3. `markDispatched`.
+- Produces: `completeOtherRounds(deps, caller): Promise<{ rounds: number; consignmentsMoved: number }>`. Demo mode only (`requireDemoMode(deps)` throws 404 `DEMO_OFF`). The route is `POST /api/demo/complete-other-rounds` with `route({ auth: 'session', idempotent: true }, …)`, like `skip-to-cutoff`. The featured round is `getDemoState(deps).featuredRoundId`. As `systemCaller('Demo simulation')`, for every `formed` round except the featured one, each in its own `withTransaction`:
+  - **M6 constraint:** `decideApproval` and `markDispatched` accept only a signed-in person (`caller.kind === 'person'`; `markDispatched` also only the order's own supplier), so a system caller cannot use them. Use the handlers directly instead, which take a `TxContext` and an `ApprovalRequest` and check no role: `approveSupplierOrder(ctx, request, input)` (`supplier-orders/ops-decision.ts`) and `confirmSupplierOrder(ctx, request, input)` (`supplier-orders/supplier-decision.ts`; `input.expectedDispatchDate` is a `YYYY-MM-DD` string that must not be before today in MYT). After each, update the `approvalRequest` row to `approved` with `decidedAt = ctx.now`, `decidedByUserId = null` (the column is nullable). For dispatch, extract the body of `markDispatched` after its role checks into an exported `dispatchOrder(ctx, supplierOrderId)` in `supplier-decision.ts`, and have both `markDispatched` and this function call it. `recordHubCheck(deps, caller, supplierOrderId, input)` calls `requireOps`, which a system caller passes.
+  1. Approve the `supplier_order` approval (`type: 'supplier_order'`, `subjectId` = the order id; find it with `approvalRequest.findFirst`).
+  2. Approve the `supplier_confirmation` approval with `expectedDispatchDate = order.requiredDispatchDate` (cutoff + 2 days, always after the demo clock).
+  3. Dispatch the order (`dispatchOrder`).
   4. `recordHubCheck` with `goodUnits = acceptedQuantity` and no damage.
   5. Move every `planned` consignment with `containsFeaturedRound = false` to `dispatched`, then `arrived` (pickup point) or `out_for_delivery` (door).
   6. Log `demo.complete_other_rounds`.
@@ -334,6 +337,8 @@ it('does nothing the second time', async () => {
   - Ops page: `src/app/(shell)/ops/consignments/page.tsx`
   - Components: `src/components/pickups/*`, `src/components/ops/network-map.tsx`, `src/components/ops/consignment-board.tsx`
 - Modify: `src/components/shell/demo-menu.tsx` ("Complete other rounds"); `src/app/(shell)/owner/page.tsx` (a next-pickup card with place, date and code)
+  - `demo-menu.tsx` is a client component with a `<dialog>` and one `<section>` per action; `busy` is `'reset' | 'skip' | null`, `skipToCutoff` calls `apiFetch('/api/demo/skip-to-cutoff', { method: 'POST', quiet: true })` after a confirmation step, then `toast.success` and `router.refresh()`. Add a `'complete'` busy value and a section in the same style (confirm first), calling `/api/demo/complete-other-rounds`.
+  - `src/app/(shell)/staff/deliveries/page.tsx` already exists as an `EmptyState` placeholder ("Confirm delivery"); modify it rather than create it. `src/components/maps/pickup-map.tsx` already uses `@vis.gl/react-google-maps` (installed, `^1.10.1`; key `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`), so reuse its setup for `network-map.tsx`.
 
 - [ ] **Step 1: Owner pickups.** A status tracker per pickup (the story 71 labels), and a large code display formatted "482 913".
 - [ ] **Step 2: Staff deliveries.** The list of pickups with code, place and opening hours. A pickup's page offers "Show code", a code entry, and "Collected". The delivery check arrives in M8; until then, show a confirmation "Collected. Next: check your goods (coming soon)".

@@ -1,4 +1,5 @@
 import { appendLog } from '@/server/modules/activity/log';
+import { freePickupsOf } from '@/server/modules/fulfilment/plan';
 import { emitEvent } from '@/server/modules/integration/events';
 import { post } from '@/server/modules/ledger/post';
 import { notify, TEMPLATES } from '@/server/modules/notifications/notify';
@@ -76,6 +77,9 @@ export async function cancelParticipation(
       part.destinationType === 'door'
         ? await refundDeliveryFeeIfUnused(ctx, shopId, part.deliveryDate)
         : 0;
+    // The line no longer holds back the shop's pickup for that place and date (C4 gate 1); the
+    // shop is locked above, so the destination lock comes after it.
+    await freePickupsOf(ctx, [part]);
 
     const scope = { shopId };
     await appendLog(ctx, {

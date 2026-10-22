@@ -5,9 +5,11 @@ import type { ShopSettingsView } from '@/lib/views/directory';
 import { BasketCard } from '@/components/baskets/basket-card';
 import { BUTTON_PRIMARY } from '@/components/common/controls';
 import { EmptyState } from '@/components/common/empty-state';
+import { NextPickupCard } from '@/components/pickups/next-pickup-card';
 import { resolveClock } from '@/server/adapters/clock';
 import { getCurrentBasket } from '@/server/modules/baskets/basket';
 import { getShopSettings } from '@/server/modules/directory/directory';
+import { listShopPickups } from '@/server/modules/fulfilment/pickups';
 import { personCaller } from '@/server/platform/caller';
 import { getDeps } from '@/server/platform/deps';
 import { scheduleDueWork } from '@/server/platform/due-work';
@@ -18,6 +20,7 @@ const LINKS = [
   { href: '/owner/basket', label: "This week's basket" },
   { href: '/owner/rounds', label: 'Open Kongsi rounds' },
   { href: '/owner/kongsi', label: 'My Kongsi' },
+  { href: '/owner/pickups', label: 'Pickups' },
   { href: '/owner/money', label: 'Money history' },
   { href: '/owner/usual-list', label: 'Your usual list' },
   { href: '/owner/settings', label: 'Settings' },
@@ -28,11 +31,13 @@ export default async function OwnerHomePage() {
   const deps = getDeps();
   scheduleDueWork(deps);
   const caller = personCaller(session);
-  const [settings, basket, clock] = await Promise.all([
+  const [settings, basket, clock, pickups] = await Promise.all([
     getShopSettings(deps, caller, shopId) as Promise<ShopSettingsView>,
     getCurrentBasket(deps, caller, shopId) as Promise<OwnerBasketView | null>,
     resolveClock(deps),
+    listShopPickups(deps, caller, shopId, { status: 'upcoming' }),
   ]);
+  const nextPickup = pickups.items[0];
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-2xl font-bold">{session.membership.orgName}</h1>
@@ -57,11 +62,15 @@ export default async function OwnerHomePage() {
           example="5 items, RM 1,630.20."
         />
       )}
-      <EmptyState
-        title="Next pickup"
-        explanation="Once you have paid, where and when to collect your goods appears here, with your pickup code."
-        example="Ipoh pickup point, Tue 11 Nov, code 482 913."
-      />
+      {nextPickup ? (
+        <NextPickupCard pickup={nextPickup} />
+      ) : (
+        <EmptyState
+          title="Next pickup"
+          explanation="Once you have paid, where and when to collect your goods appears here, with your pickup code."
+          example="Ipoh pickup point, Tue 11 Nov, code 482 913."
+        />
+      )}
       <EmptyState
         title="Savings this month"
         explanation="What buying together saved you this month appears here. It is Estimated until the rounds close."

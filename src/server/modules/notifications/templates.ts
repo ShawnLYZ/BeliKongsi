@@ -1,5 +1,11 @@
 import type { Role } from '@/generated/prisma/client';
-import { formatMytDate, formatMytShort, formatRM, formatUnits } from '@/lib/format';
+import {
+  formatMytDate,
+  formatMytShort,
+  formatPickupCode,
+  formatRM,
+  formatUnits,
+} from '@/lib/format';
 
 export type NotificationMessage = { title: string; body: string; whatsappText: string };
 
@@ -175,5 +181,20 @@ export const TEMPLATES = defineTemplates({
   'supplier.payout': (data: { amountSen: number; units: number; unitName: string }) => {
     const text = `Payment released: ${formatRM(data.amountSen)} for ${formatUnits(data.units, data.unitName)} (simulated).`;
     return () => ({ title: 'Payment released', body: text, whatsappText: text });
+  },
+  // Owner and staff: every good of a pickup is at the pickup point (C4).
+  'pickup.ready': (data: { placeName: string; openingHours: string; code: string }) => {
+    const text = `Ready at ${data.placeName} (${data.openingHours}). Pickup code ${formatPickupCode(data.code)}.`;
+    return () => ({ title: 'Ready for pickup', body: text, whatsappText: text });
+  },
+  // Owner and staff: a door pickup's goods are on the way today.
+  'pickup.out_for_delivery': (data: { code: string }) => {
+    const text = `Your goods are out for delivery today. Have code ${formatPickupCode(data.code)} ready.`;
+    return () => ({ title: 'Out for delivery', body: text, whatsappText: text });
+  },
+  // Owner and staff: a door pickup was handed over.
+  'pickup.delivered': () => {
+    const text = 'Your goods were delivered. Please check them now.';
+    return () => ({ title: 'Delivered', body: text, whatsappText: text });
   },
 });

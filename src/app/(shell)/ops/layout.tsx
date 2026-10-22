@@ -4,6 +4,7 @@ import { SubNav } from '@/components/common/sub-nav';
 const ITEMS = [
   { href: '/ops', label: 'Approvals', exact: true },
   { href: '/ops/rounds', label: 'Rounds' },
+  { href: '/ops/consignments', label: 'Consignments' },
   { href: '/ops/money', label: 'Money' },
   { href: '/ops/events', label: 'Integration events' },
   { href: '/activity', label: 'Activity log' },

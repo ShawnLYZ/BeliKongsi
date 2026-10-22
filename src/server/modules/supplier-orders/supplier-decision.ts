@@ -125,31 +125,45 @@ export async function markDispatched(
     throw notFound('Supplier order');
   }
   const ownSupplierId = caller.session.membership.supplierId;
-  return withTransaction(deps, caller, async (ctx) => {
-    if (!UUID.test(supplierOrderId)) throw notFound('Supplier order');
-    const order = await lockedOrder(ctx, supplierOrderId);
-    if (order.supplierId !== ownSupplierId) throw notFound('Supplier order');
-    if (order.status !== 'confirmed') {
-      throw conflict('ORDER_NOT_CONFIRMED', 'Only a confirmed order can be marked dispatched.');
-    }
-    await ctx.tx.supplierOrder.update({
-      where: { id: order.id },
-      data: { status: 'dispatched', dispatchedAt: ctx.now },
-    });
-    await ctx.tx.round.update({ where: { id: order.roundId }, data: { status: 'dispatched' } });
-    await appendLog(ctx, {
-      action: 'supplier_order.dispatched',
-      subjectType: 'supplier_order',
-      subjectId: order.id,
-      scope: { supplierId: order.supplierId, operator: true },
-      before: { status: 'confirmed' },
-      after: { status: 'dispatched', roundId: order.roundId },
-    });
-    await emitEvent(ctx, 'supplier_order.dispatched', {
-      supplierOrderId: order.id,
-      roundId: order.roundId,
-      supplierId: order.supplierId,
-    });
-    return { supplierOrderId: order.id, status: 'dispatched' as const };
+  return withTransaction(deps, caller, (ctx) =>
+    dispatchOrder(ctx, supplierOrderId, { supplierId: ownSupplierId }),
+  );
+}
+
+/**
+ * Marks a confirmed order dispatched, with its round, in the caller's transaction. `only.supplierId`
+ * limits it to that supplier's orders (anything else is 404); the demo simulation passes none.
+ */
+export async function dispatchOrder(
+  ctx: TxContext,
+  supplierOrderId: string,
+  only: { supplierId?: string | null } = {},
+): Promise<{ supplierOrderId: string; status: 'dispatched' }> {
+  if (!UUID.test(supplierOrderId)) throw notFound('Supplier order');
+  const order = await lockedOrder(ctx, supplierOrderId);
+  if ('supplierId' in only && order.supplierId !== only.supplierId) {
+    throw notFound('Supplier order');
+  }
+  if (order.status !== 'confirmed') {
+    throw conflict('ORDER_NOT_CONFIRMED', 'Only a confirmed order can be marked dispatched.');
+  }
+  await ctx.tx.supplierOrder.update({
+    where: { id: order.id },
+    data: { status: 'dispatched', dispatchedAt: ctx.now },
   });
+  await ctx.tx.round.update({ where: { id: order.roundId }, data: { status: 'dispatched' } });
+  await appendLog(ctx, {
+    action: 'supplier_order.dispatched',
+    subjectType: 'supplier_order',
+    subjectId: order.id,
+    scope: { supplierId: order.supplierId, operator: true },
+    before: { status: 'confirmed' },
+    after: { status: 'dispatched', roundId: order.roundId },
+  });
+  await emitEvent(ctx, 'supplier_order.dispatched', {
+    supplierOrderId: order.id,
+    roundId: order.roundId,
+    supplierId: order.supplierId,
+  });
+  return { supplierOrderId: order.id, status: 'dispatched' as const };
 }

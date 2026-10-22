@@ -1,6 +1,7 @@
 import type { Participation } from '@/generated/prisma/client';
 import { appendLog } from '@/server/modules/activity/log';
 import { allocateShortfall, type AllocateShortfallResult } from '@/server/engine';
+import { planConsignmentsAndPickups } from '@/server/modules/fulfilment/plan';
 import { emitEvent } from '@/server/modules/integration/events';
 import { post } from '@/server/modules/ledger/post';
 import { notify, TEMPLATES } from '@/server/modules/notifications/notify';
@@ -256,8 +257,8 @@ export async function recordHubCheck(
     await tx.supplierOrder.update({ where: { id: order.id }, data: { status: 'settled' } });
     await tx.round.update({ where: { id: roundId }, data: { status: 'at_hub' } });
 
-    // M7 extension point: planConsignmentsAndPickups(ctx, roundId) goes here, once the
-    // fulfilment module exists, so consignments and pickups are planned in this transaction.
+    // Consignments and pickups for the allocated lines, in this transaction (PRD §10).
+    await planConsignmentsAndPickups(ctx, roundId);
 
     await appendLog(ctx, {
       action: 'hub.check_recorded',

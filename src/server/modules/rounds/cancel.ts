@@ -1,4 +1,5 @@
 import { appendLog } from '@/server/modules/activity/log';
+import { freePickupsOf } from '@/server/modules/fulfilment/plan';
 import { emitEvent } from '@/server/modules/integration/events';
 import { post } from '@/server/modules/ledger/post';
 import { notify, TEMPLATES } from '@/server/modules/notifications/notify';
@@ -71,6 +72,10 @@ export async function cancelRoundWithRefunds(
       : a.shopId.localeCompare(b.shopId),
   );
   for (const p of feeDates) await refundDeliveryFeeIfUnused(ctx, p.shopId, p.deliveryDate);
+
+  // A refunded line no longer holds back its shop's pickup for that place and date (C4).
+  // After the shop locks, like the hub check: a concurrent status move then sees this cancel.
+  await freePickupsOf(ctx, kept);
 
   await tx.round.update({ where: { id: roundId }, data: { status: 'cancelled' } });
   await emitEvent(ctx, 'round.cancelled', {

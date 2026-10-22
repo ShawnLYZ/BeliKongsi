@@ -21,6 +21,14 @@ export function requireOwnerShop(session: Session | null): { session: Session; s
   return { session: owner, shopId };
 }
 
+/** For staff pages: the staff member's session and shop. Anyone else goes to their own home. */
+export function requireStaffShop(session: Session | null): { session: Session; shopId: string } {
+  const staff = requirePageRole(session, ['staff']);
+  const shopId = staff.membership.shopId;
+  if (!shopId) redirect('/sign-in');
+  return { session: staff, shopId };
+}
+
 /** For supplier pages: the supplier's session and supplier id. Anyone else goes to their own home. */
 export function requireSupplierPage(session: Session | null): {
   session: Session;
