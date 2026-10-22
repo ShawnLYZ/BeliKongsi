@@ -1,0 +1,22 @@
+{
+  "id": "order-10",
+  "text": "dua ctn susu pekat\nlima papan telur gred B\n三箱 淡奶\nsatu tin minyak masak",
+  "expected": [
+    {
+      "productKey": "CM",
+      "quantity": 2
+    },
+    {
+      "productKey": "EGG_B",
+      "quantity": 5
+    },
+    {
+      "productKey": "EM",
+      "quantity": 3
+    },
+    {
+      "productKey": "OIL",
+      "quantity": 1
+    }
+  ]
+}

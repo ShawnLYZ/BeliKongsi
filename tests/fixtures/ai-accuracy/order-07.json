@@ -1,0 +1,22 @@
+{
+  "id": "order-07",
+  "text": "🥛 susu pekat 4 ctn\n🛢️ minyak 2 tin\n🥚 telur gred B 6 papan\n☕ teh 1 ctn",
+  "expected": [
+    {
+      "productKey": "CM",
+      "quantity": 4
+    },
+    {
+      "productKey": "OIL",
+      "quantity": 2
+    },
+    {
+      "productKey": "EGG_B",
+      "quantity": 6
+    },
+    {
+      "productKey": "TEA",
+      "quantity": 1
+    }
+  ]
+}

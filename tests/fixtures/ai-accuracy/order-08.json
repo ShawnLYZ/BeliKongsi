@@ -1,0 +1,22 @@
+{
+  "id": "order-08",
+  "text": "susu pekat 2 ctn\n淡奶 3 箱\nminyak 4 tin\ntelur A 8 papan",
+  "expected": [
+    {
+      "productKey": "CM",
+      "quantity": 2
+    },
+    {
+      "productKey": "EM",
+      "quantity": 3
+    },
+    {
+      "productKey": "OIL",
+      "quantity": 4
+    },
+    {
+      "productKey": "EGG_A",
+      "quantity": 8
+    }
+  ]
+}

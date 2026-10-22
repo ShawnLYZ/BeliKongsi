@@ -1,8 +1,12 @@
+import { tmpdir } from 'node:os';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { PrismaClient } from '@/generated/prisma/client';
 import { setDepsForTests, type AppDeps } from '@/server/platform/deps';
 import { createPrismaClient } from '@/server/platform/db';
+import { createFakeOrderReader } from '@/server/adapters/ai/fake';
 import { systemClock } from '@/server/adapters/clock';
+import { createLocalStorage } from '@/server/adapters/storage/local';
+import { simulatedLogistics } from '@/server/adapters/logistics';
 import { callRoute } from './helpers/route';
 import { createTestDatabase } from './helpers/db';
 
@@ -23,6 +27,9 @@ function depsFor(url: string): AppDeps {
       STORAGE_ADAPTER: 'local',
     },
     clock: systemClock,
+    logistics: simulatedLogistics,
+    ai: createFakeOrderReader(),
+    storage: createLocalStorage({ dir: tmpdir() }),
   };
 }
 

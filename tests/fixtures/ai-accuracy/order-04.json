@@ -1,0 +1,22 @@
+{
+  "id": "order-04",
+  "text": "evap 2 kotak\n鸡蛋 B 5 papan\nbeg kertas 1 ctn\n16oz cups 3 ctn",
+  "expected": [
+    {
+      "productKey": "EM",
+      "quantity": 2
+    },
+    {
+      "productKey": "EGG_B",
+      "quantity": 5
+    },
+    {
+      "productKey": "KRAFT",
+      "quantity": 1
+    },
+    {
+      "productKey": "CUPS",
+      "quantity": 3
+    }
+  ]
+}

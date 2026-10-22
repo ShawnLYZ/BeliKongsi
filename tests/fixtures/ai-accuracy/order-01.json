@@ -1,0 +1,18 @@
+{
+  "id": "order-01",
+  "text": "Boss, nak order ya:\nsusu pekat 5 ctn\nminyak masak 3 tin\ntepung 2 guni\nterima kasih",
+  "expected": [
+    {
+      "productKey": "CM",
+      "quantity": 5
+    },
+    {
+      "productKey": "OIL",
+      "quantity": 3
+    },
+    {
+      "productKey": "FLOUR",
+      "quantity": 2
+    }
+  ]
+}

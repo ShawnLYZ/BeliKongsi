@@ -1,0 +1,54 @@
+{
+  "id": "order-17",
+  "text": "1. susu pekat 2 ctn\n2. susu cair 3 ctn\n3. minyak masak 4 tin\n4. tepung gandum 1 guni\n5. kopi 2 ctn\n6. teh 1 ctn\n7. telur gred A 6 papan\n8. telur gred B 4 papan\n9. cawan plastik 2 ctn\n10. bekas tapau 3 ctn\n11. beg plastik 1 ctn\n12. beg kertas 2 ctn",
+  "expected": [
+    {
+      "productKey": "CM",
+      "quantity": 2
+    },
+    {
+      "productKey": "EM",
+      "quantity": 3
+    },
+    {
+      "productKey": "OIL",
+      "quantity": 4
+    },
+    {
+      "productKey": "FLOUR",
+      "quantity": 1
+    },
+    {
+      "productKey": "COFFEE",
+      "quantity": 2
+    },
+    {
+      "productKey": "TEA",
+      "quantity": 1
+    },
+    {
+      "productKey": "EGG_A",
+      "quantity": 6
+    },
+    {
+      "productKey": "EGG_B",
+      "quantity": 4
+    },
+    {
+      "productKey": "CUPS",
+      "quantity": 2
+    },
+    {
+      "productKey": "CONT",
+      "quantity": 3
+    },
+    {
+      "productKey": "BAGS",
+      "quantity": 1
+    },
+    {
+      "productKey": "KRAFT",
+      "quantity": 2
+    }
+  ]
+}

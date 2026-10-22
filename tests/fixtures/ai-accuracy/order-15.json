@@ -1,0 +1,14 @@
+{
+  "id": "order-15",
+  "text": "susu pekat 96 tin\nminyak 2 tin",
+  "expected": [
+    {
+      "productKey": "CM",
+      "quantity": 2
+    },
+    {
+      "productKey": "OIL",
+      "quantity": 2
+    }
+  ]
+}

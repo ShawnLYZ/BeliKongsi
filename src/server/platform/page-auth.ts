@@ -12,3 +12,11 @@ export function requirePageRole(session: Session | null, roles: readonly Role[])
   if (target !== null || !session) redirect(target ?? '/sign-in');
   return session;
 }
+
+/** For owner pages: the owner's session and shop. Anyone else goes to their own home. */
+export function requireOwnerShop(session: Session | null): { session: Session; shopId: string } {
+  const owner = requirePageRole(session, ['owner']);
+  const shopId = owner.membership.shopId;
+  if (!shopId) redirect('/sign-in');
+  return { session: owner, shopId };
+}

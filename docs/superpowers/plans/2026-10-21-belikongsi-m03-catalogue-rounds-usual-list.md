@@ -31,7 +31,7 @@
 
 ### Task 0: Re-sync
 
-- [ ] **Step 1:** `git switch -c m03-catalogue-rounds-usual-list`
+- [x] **Step 1:** `git switch -c m03-catalogue-rounds-usual-list` (done)
 - [ ] **Step 2:** Follow index §6. Confirm in M2 code: `withTransaction`, `TxContext`, `appendLog`, `ACTIONS`, `emitEvent`, `notify`, `requireShopAccess`, `requireRole`, `createTestApp`, `seedId`, `SAMPLE_ORDER_TEXT`, `SAMPLE_USUAL_PRICES_SEN`; in M1 code: `quote`, `unitAmounts`, `roundHalfUpDiv`.
 - [ ] **Step 3:** Check the current NVIDIA FLUX.2 Klein endpoint, request body and response shape on build.nvidia.com, and the `@google/genai` 2.x `generateContent` options for JSON-schema output (`responseMimeType`, `responseJsonSchema`, temperature, request timeout). Correct Tasks 5 and 7 if they differ.
 - [ ] **Step 4:** Commit any plan edits.
@@ -43,6 +43,7 @@
 **Files:**
 
 - Create: `src/server/adapters/logistics.ts`
+- Modify: `src/server/platform/deps.ts` (add `logistics: simulatedLogistics` to the object `getDeps` builds), `tests/api/helpers/app.ts` (`createTestDeps` builds `AppDeps` by hand; add `logistics: simulatedLogistics`, and later `ai` and `storage`)
 - Test: `tests/unit/logistics.test.ts`
 
 **Interfaces:**
@@ -56,9 +57,22 @@
   - `interface LogisticsPartner { quoteShipping(i: { hub: LatLng; pickupPoint: LatLng; unitWeightGrams: number }): { distanceKm: number; ratePerKgSen: number; unitShippingSen: number }; quoteDeliveryFee(i: { pickupPoint: LatLng; shop: LatLng }): { distanceKm: number; feeSen: number | null }; newConsignmentReference(): string }` and `simulatedLogistics`.
   - `AppDeps.logistics: LogisticsPartner`.
 
-- [ ] **Step 1: Write the failing tests:**
+- [ ] **Step 1: Write the failing tests.** `prisma/seed/network.ts` exports the coordinates as arrays (`HUBS`, `PICKUP_POINTS`, each item `{ key, lat, lng, ... }`) and `prisma/seed/shops.ts` exports `DEMO_SHOPS`; there are no `HUB_KV`-style constants, so the test builds them:
 
 ```ts
+import { HUBS, PICKUP_POINTS } from '../../prisma/seed/network';
+import { DEMO_SHOPS } from '../../prisma/seed/shops';
+const at = (list: readonly { key: string; lat: number; lng: number }[], key: string): LatLng => {
+  const x = list.find((i) => i.key === key)!;
+  return { lat: x.lat, lng: x.lng };
+};
+const HUB_KV = at(HUBS, 'HUB_KV');
+const HUB_JOHOR = at(HUBS, 'HUB_JOHOR');
+const PP_IPOH = at(PICKUP_POINTS, 'PP_IPOH');
+const PP_JB = at(PICKUP_POINTS, 'PP_JB');
+const PP_KUANTAN = at(PICKUP_POINTS, 'PP_KUANTAN');
+const GERAI = at(DEMO_SHOPS, 'GERAI');
+
 it('measures one degree of longitude at the equator', () =>
   expect(distanceKm({ lat: 0, lng: 0 }, { lat: 0, lng: 1 })).toBe(111.2));
 it.each([
@@ -97,7 +111,7 @@ it('quotes Gerai Contoh door delivery at RM 12.00', () => {
 });
 ```
 
-- [ ] **Step 2:** Run. **Step 3:** Implement. Coordinates come from `prisma/seed/network.ts`. If a C9 assertion fails, adjust the seed coordinates in index §5.2 and the seed together, never the rates. **Step 4:** Run. Expected: PASS.
+- [ ] **Step 2:** Run. **Step 3:** Implement. Coordinates come from `prisma/seed/network.ts` and `prisma/seed/shops.ts` (checked in Task 0: KV hub to Ipoh 176.0 km, Johor Bahru 303.2 km, Kuantan 216.6 km; Johor hub to Kuantan 247.9 km; Gerai Contoh to the Johor Bahru point 6.0 km; Kedai Kopi Contoh to Ipoh 1.3 km; so every C9 assertion above holds with the seed as built). If a C9 assertion fails, adjust the seed coordinates in index §5.2 and the seed together, never the rates. **Step 4:** Run. Expected: PASS.
 - [ ] **Step 5: Commit:** `feat(logistics): add the simulated partner's distances and rate card`
 
 ---
@@ -107,6 +121,7 @@ it('quotes Gerai Contoh door delivery at RM 12.00', () => {
 **Files:**
 
 - Create: `src/server/modules/rounds/schedule.ts`, `src/server/modules/rounds/open.ts`
+- Reuse, do not rewrite, `src/lib/time.ts`: `isoWeekOf`, `isoWeekIndex`, `isoWeekStart`, `addIsoWeeks`, `mytDate`, `mytParts` and `mytInstant` all exist. The seed gives every product `scheduleAnchorWeek = isoWeekOf(anchorMonday)`, which in tests (`anchorMonday` is the clock, 2026-11-01T22:05:00Z) and after `pnpm db:reset` is `2026-W45`, so fortnightly products also close in W45 when opened at the anchor.
 - Modify: `prisma/seed/index.ts` (a temporary phase `openRoundsAtAnchor` at the end of `seedDemo` that calls `openNextRound` for every active product at the anchor time, so the dev database and `seed: 'demo'` tests have open rounds; M4 replaces it with `seedCurrentWeek`)
 - Test: `tests/unit/schedule.test.ts`, `tests/api/rounds-open.test.ts` (uses `createTestApp({ seed: 'reference' })`, so no round is open yet)
 
@@ -120,7 +135,7 @@ it('quotes Gerai Contoh door delivery at RM 12.00', () => {
   - `deliveryDateOf(cutoff): string`, which is `mytDate(expectedReadyAt(cutoff))`.
   - `requiredDispatchDate(cutoff): string`, which is cut-off + 2 days (C10).
   - `expectedHubDate(cutoff): string`, which is cut-off + 4 days.
-  - `openNextRound(ctx: TxContext, productId: string, opensAt: Date): Promise<Round>`. It sets:
+  - `openNextRound(ctx: TxContext, productId: string, opensAt: Date): Promise<Round>`. The `rounds` table also requires `supplierId` (the product's), `hubId` (the product's supplier's `hubId`), `opensAt` and `expectedReadyAt` (`expectedReadyAt(cutoffAt)`). It sets:
     - `cutoffAt = nextCutoffAfter(product, opensAt)`
     - `cycleLabel = isoWeekOf(cutoffAt)`
     - frozen `tiersSnapshot`, `feeBps = 200`, buy-alone price and unit weight
@@ -202,7 +217,7 @@ it('logs and emits the opening without names', async () => {
 
 **Interfaces:**
 
-- Consumes: `quote` (M1), `simulatedLogistics` (Task 1), `requireShopAccess` (M2).
+- Consumes: `quote(input: QuoteInput): QuoteResult` and `TierView` from `@/server/engine` (M1). `QuoteInput = { tiers, feeBps, unitShippingSen, quantity, currentRoundTotal, priceLimitSen?, unitName }`; `QuoteResult = { starting, startingLineSen, withoutYou, withYou, limit, explanation }` with `starting: UnitAmounts = { goodsSen, feeSen, shippingSen, allInSen }` (checked: `starting.allInSen` and `startingLineSen` exist, and the CM Ipoh numbers 16409 and 98454 reproduce). Also `simulatedLogistics` (Task 1), `requireShopAccess(caller, shopId, roles?)` (M2) and `expectNoMoneyFields` from `tests/api/helpers/scans.ts`.
 - Produces:
   - `normaliseSearch(s: string): string`: NFKC, lower case, collapsed whitespace, trimmed.
   - `searchCatalogue(deps, caller, q: string | null): Promise<CatalogueItemView[] | StaffCatalogueItemView[]>`. Ranking: an exact alias or name match, then a prefix match, then a substring match in either direction.
@@ -299,7 +314,7 @@ it('says when the next round closes after a missed cut-off (story 50)', async ()
 **Files:**
 
 - Create: `src/server/modules/directory/directory.ts`, `src/lib/views/directory.ts`, `src/app/api/pickup-points/route.ts`, `src/app/api/shops/[shopId]/settings/route.ts`
-- Modify: `src/server/modules/activity/actions.ts` (add `shop.settings_changed`, `shop.setup_completed`)
+- Modify: `src/server/modules/activity/actions.ts` (add `shop.settings_changed`, `shop.setup_completed`: the only two codes M3 uses that `ACTIONS` lacks; `round.opened` and the three `usual_list.*` codes already exist)
 - Test: `tests/api/settings.test.ts`
 
 **Interfaces:**
@@ -310,7 +325,7 @@ it('says when the next round closes after a missed cut-off (story 50)', async ()
   - `updateShopSettings(deps, caller, shopId, input: { defaultFulfilment: 'pickup'; pickupPointId: string } | { defaultFulfilment: 'door' }): Promise<ShopSettingsView>`. Owner only.
     - When door delivery is unavailable, it fails with 422 `DOOR_TOO_FAR` and the message "Your shop is more than 20 km from the nearest pickup point, so door delivery isn't available. Choose a pickup point instead."
     - It logs `shop.settings_changed`.
-    - When the shop has a usual list and `setupCompletedAt` is null, it also sets `setupCompletedAt` and logs `shop.setup_completed`.
+    - The shop's pickup column is `defaultPickupPointId`. When the shop has a usual list and `setupCompletedAt` is null (Kedai Kopi Contoh starts that way; Gerai Contoh and Kafe Contoh are already set up), it also sets `setupCompletedAt` and logs `shop.setup_completed`.
 
 - [ ] **Step 1: Write the failing tests:**
 
@@ -362,7 +377,8 @@ it('lets only the owner change fulfilment (story 102)', async () => {
 **Files:**
 
 - Create: `src/server/adapters/ai/types.ts`, `src/server/adapters/ai/redact.ts`, `src/server/adapters/ai/prompt.ts`, `src/server/adapters/ai/schema.ts`, `src/server/adapters/ai/gemini.ts`, `src/server/adapters/ai/fake.ts`, `src/server/adapters/ai/saved-example.ts`, `src/server/modules/usual-list/parse.ts`, `src/lib/views/usual-list.ts`, `src/app/api/shops/[shopId]/usual-list/parse/route.ts`
-- Modify: `src/server/platform/deps.ts` (`AppDeps.ai: OrderReader`; Gemini when `AI_ADAPTER=gemini`, fake otherwise)
+- Modify: `src/server/platform/deps.ts` (`AppDeps.ai: OrderReader`; Gemini when `AI_ADAPTER=gemini`, fake otherwise), `tests/api/helpers/app.ts` (`createTestDeps` sets `ai: createFakeOrderReader()`; tests reach it as `app.deps.ai`, which is the `fakeAi` below), `package.json` (`pnpm add @google/genai@^2`; none of the M3 libraries is installed yet)
+- Env already present in `src/server/platform/env.ts`: `AI_ADAPTER` (`gemini` or `fake`, default `fake`), `GEMINI_API_KEY`, `GEMINI_MODEL` (default `gemini-3.5-flash-lite`) and `DEMO_MODE` (boolean, default true). "Demo mode" below means `deps.env.DEMO_MODE`.
 - Test: `tests/unit/redact.test.ts`, `tests/unit/gemini-adapter.test.ts`, `tests/api/usual-list-parse.test.ts`
 
 **Interfaces:**
@@ -371,7 +387,7 @@ it('lets only the owner change fulfilment (story 102)', async () => {
   - `CatalogueEntry`, `ReadLine`, `ReadResult`, `OrderReader`: as index §4.3.
     - `ReadLine = { sourceText: string; productId: string | null; quantity: number | null; unitAsWritten: string | null; confidence: number; alternatives: string[]; note: string | null }`
     - `OrderReader = { readonly model: string; readOrderText(i: { text: string; catalogue: CatalogueEntry[] }): Promise<ReadResult> }`
-  - `class AiUnavailableError extends Error`.
+  - `class AiUnavailableError extends Error`. The route maps it to `new AppError('AI_UNAVAILABLE', 503, message, { canUseSavedExample: deps.env.DEMO_MODE })`; the existing `aiUnavailable()` in `src/server/platform/errors.ts` takes no details, so extend it to accept them.
   - `redactPersonalData(text: string): { text: string; removedCount: number }`. Replacements: `[phone removed]`, `[email removed]`, `[id removed]`.
   - `buildPrompt(catalogue: CatalogueEntry[]): string`. It contains:
     - each entry's id, name, pack, unit and aliases
@@ -379,6 +395,7 @@ it('lets only the owner change fulfilment (story 102)', async () => {
     - the pack conversions
     - the rules: never invent ids (`null` when nothing matches); at most 3 alternatives; whole-number quantities in the product's unit; convert packs and say so in `note`; list greetings, names and delivery chatter in `ignoredText`
   - `READ_RESULT_JSON_SCHEMA`: the PRD §16 output shape, with `alternatives.maxItems = 3`.
+  - Gemini call (`@google/genai` 2.x, checked against `googleapis/js-genai` `src/types.ts`, v2.30): `const ai = new GoogleGenAI({ apiKey }); const r = await ai.models.generateContent({ model, contents: text, config: { systemInstruction: prompt, temperature: 0.1, responseMimeType: 'application/json', responseJsonSchema: READ_RESULT_JSON_SCHEMA, httpOptions: { timeout: timeoutMs }, abortSignal: AbortSignal.timeout(timeoutMs) } })`, then read `r.text`. `responseJsonSchema` takes plain JSON Schema (no Zod conversion). `httpOptions.timeout` is in milliseconds; `abortSignal` is client-side only (the request is still billed). Errors carry a numeric `status`.
   - `createGeminiOrderReader(opts: { apiKey: string; model: string; timeoutMs?: number; generate?: (req: { model: string; prompt: string; text: string }) => Promise<string>; sleep?: (ms: number) => Promise<void> }): OrderReader`. The defaults are the SDK call and `setTimeout`. One retry after 2,000 ms on 429 or 5xx, then `AiUnavailableError`. Also `toReadResult(raw: string): ReadResult`.
   - `createFakeOrderReader(fixtures?: Record<string, ReadResult>, opts?: { failWith?: Error }): OrderReader & { received: string[] }`. The sample order's fixture is built in: index §5.6, keyed by its redacted text.
   - `SAVED_EXAMPLE: ReadResult`.
@@ -460,7 +477,7 @@ it('refuses more than 2,000 characters or 40 lines', async () => {
 });
 ```
 
-- [ ] **Step 2:** Run. **Step 3:** Implement. The validation rules are those in Global Constraints. The run stores the redacted text only. **Step 4:** Run. Expected: PASS.
+- [ ] **Step 2:** Run. **Step 3:** Implement. The validation rules are those in Global Constraints. The run stores the redacted text only. `AiSuggestionRun` requires `kind: 'usual_list_text'`, `status` (`succeeded`, `failed` or `saved_example`), `model`, `redactedInput`, `suggestions` (Json) and `latencyMs`. `appendLog` takes its actor from `ctx.actor`, so log as the AI with `appendLog({ ...ctx, actor: { type: 'ai', model } }, { action: 'usual_list.ai_suggested', ..., aiMetadata: { model, lineCount, averageConfidence, suggestionRunId } })` (`aiMetadata` takes exactly those four fields; the log supports actor types `person`, `system` and `ai`). Rate limit: `enforceRateLimit(deps, 'ai-parse:' + shopId, 10, 3_600_000)` from `src/server/platform/rate-limit.ts`. **Step 4:** Run. Expected: PASS.
 - [ ] **Step 5: Commit:** `feat(ai): read pasted orders with redaction, validation and fallbacks`
 
 ---
@@ -540,7 +557,7 @@ it('keeps the usual list from staff', async () => {
   - Image scripts: `scripts/generate-product-images.ts`, `scripts/product-image-sheet.ts`
   - Seed data and output: `prisma/seed/image-subjects.ts`, `prisma/seed/assets/products/*.webp` (12 files)
   - UI: `src/components/catalogue/product-image.tsx`
-- Modify: `prisma/seed/catalogue.ts` (`imageKey`, `imageAiGenerated: true`), `prisma/seed/index.ts` (copy the assets into local storage when `STORAGE_ADAPTER=local`), `src/server/platform/deps.ts` (`AppDeps.storage`), `package.json` (`images:generate`, `images:sheet`)
+- Modify: `prisma/seed/catalogue.ts` (`imageKey`, `imageAiGenerated: true`), `prisma/seed/index.ts` (copy the assets into local storage when `STORAGE_ADAPTER=local`), `src/server/platform/deps.ts` (`AppDeps.storage`), `tests/api/helpers/app.ts` (`storage: createLocalStorage(...)` on a temp dir), `package.json` (`images:generate`, `images:sheet`; `pnpm add sharp @supabase/supabase-js@^2`). Env already present: `STORAGE_ADAPTER`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`. `NVIDIA_API_KEY` is not in `env.ts`; the scripts read it from `process.env` (loading `.env.local`) without adding it to the server schema
 - Test: `tests/unit/product-images.test.ts`, `tests/api/storage-local.test.ts`
 
 **Interfaces:**
@@ -583,6 +600,7 @@ it('refuses paths that leave the bucket', async () =>
 - [ ] **Step 2:** Implement the storage adapters and the route (404 unless `STORAGE_ADAPTER=local`).
 - [ ] **Step 3: Generate the images.**
   - `NVIDIA_API_KEY` comes from `.env.local`, never the browser or the repo.
+  - NVIDIA hosted endpoint (checked on build.nvidia.com, `flux_2-klein-4b`): `POST https://ai.api.nvidia.com/v1/genai/black-forest-labs/flux.2-klein-4b` with headers `Authorization: Bearer $NVIDIA_API_KEY`, `Accept: application/json`, `Content-Type: application/json`, and body `{ "prompt": string, "width": 1024, "height": 1024, "seed": number, "steps": number }`. (`image: [...]` is for editing only; omit it.) Supported sizes include 1024x1024. The response field names are not documented on the public pages, so treat the first call as discovery: save the JSON, accept the base64 image from `artifacts[0].base64` (the shape the sibling FLUX endpoints use), `image` or `b64_json`, and fail listing the top-level keys if none is present. `steps` has no documented default; start with 4 (a distilled model) and raise it only if the pictures are poor.
   - `pnpm images:generate` calls FLUX.2 Klein once per product with the PRD §17 template and a fixed seed, saving PNGs to `.data/images/raw/`.
   - `pnpm images:sheet` writes `.data/images/contact-sheet.html`.
 - [ ] **Step 4: STOP: ask the user to review the images (D7).**
@@ -648,7 +666,7 @@ it('refuses paths that leave the bucket', async () =>
   - Pages: `src/app/(shell)/owner/setup/page.tsx`, `src/app/(shell)/owner/usual-list/page.tsx`, `src/app/(shell)/owner/settings/page.tsx`, `src/app/(shell)/owner/rounds/page.tsx`, `src/app/(shell)/owner/rounds/[roundId]/page.tsx`
   - Setup components: `src/components/setup/*`
   - Shared components: `src/components/catalogue/catalogue-search.tsx`, `src/components/rounds/round-card.tsx`, `src/components/rounds/tier-ladder.tsx`, `src/components/rounds/progress-bar.tsx`, `src/components/maps/pickup-map.tsx`, `src/components/fulfilment/fulfilment-picker.tsx`
-- Modify: `src/app/(shell)/owner/page.tsx` (a "Finish setup" card while setup is incomplete)
+- Modify: `package.json` (`pnpm add @vis.gl/react-google-maps@^1`), `src/app/(shell)/owner/page.tsx` (a "Finish setup" card while setup is incomplete)
 
 - [ ] **Step 1: Build the setup flow** (PRD §22 "Setup (3 steps)").
   1. **Step 1, "Paste your usual order".**

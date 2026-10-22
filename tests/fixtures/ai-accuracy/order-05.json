@@ -1,0 +1,22 @@
+{
+  "id": "order-05",
+  "text": "susu pkat 3 ctn\nminyk masak 2 tin\ntepong 1 guni\nkopi 1 ctn",
+  "expected": [
+    {
+      "productKey": "CM",
+      "quantity": 3
+    },
+    {
+      "productKey": "OIL",
+      "quantity": 2
+    },
+    {
+      "productKey": "FLOUR",
+      "quantity": 1
+    },
+    {
+      "productKey": "COFFEE",
+      "quantity": 1
+    }
+  ]
+}

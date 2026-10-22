@@ -1,0 +1,22 @@
+{
+  "id": "order-09",
+  "text": "teh 20 pek\nkopi 30 pek\ncawan 16oz 2 kotak\nbeg kertas 1 kotak",
+  "expected": [
+    {
+      "productKey": "TEA",
+      "quantity": 2
+    },
+    {
+      "productKey": "COFFEE",
+      "quantity": 3
+    },
+    {
+      "productKey": "CUPS",
+      "quantity": 2
+    },
+    {
+      "productKey": "KRAFT",
+      "quantity": 1
+    }
+  ]
+}

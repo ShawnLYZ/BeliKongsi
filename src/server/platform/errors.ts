@@ -23,8 +23,8 @@ export const unprocessable = (code: string, message: string, details?: unknown) 
   new AppError(code, 422, message, details);
 export const rateLimited = () =>
   new AppError('RATE_LIMITED', 429, 'Too many requests. Please try again shortly.');
-export const aiUnavailable = () =>
-  new AppError('AI_UNAVAILABLE', 503, 'The assistant is unavailable right now.');
+export const aiUnavailable = (details?: unknown) =>
+  new AppError('AI_UNAVAILABLE', 503, 'The assistant is unavailable right now.', details);
 
 export function toErrorResponse(error: unknown): Response {
   if (error instanceof AppError) {

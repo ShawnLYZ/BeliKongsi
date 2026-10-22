@@ -1,9 +1,15 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- response bodies are arbitrary JSON; tests assert on them */
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Client as PgClient } from 'pg';
 import { seedDemo, seedReferenceData } from '../../../prisma/seed';
 import { seedId, type SeedUserKey } from '../../../prisma/seed/ids';
 import type { PrismaClient } from '@/generated/prisma/client';
+import { createFakeOrderReader } from '@/server/adapters/ai/fake';
 import { fixedClock, type MutableClock } from '@/server/adapters/clock';
+import { createLocalStorage } from '@/server/adapters/storage/local';
+import { simulatedLogistics } from '@/server/adapters/logistics';
 import { systemCaller } from '@/server/platform/caller';
 import { createPrismaClient } from '@/server/platform/db';
 import { setDepsForTests, type AppDeps } from '@/server/platform/deps';
@@ -20,9 +26,16 @@ export async function createTestDeps(opts: { now?: string } = {}): Promise<{
   const db = await createTestDatabase();
   const prisma = createPrismaClient(db.appUrl);
   const clock = fixedClock(opts.now ?? '2026-11-01T22:05:00Z');
+  const storageDir = mkdtempSync(join(tmpdir(), 'bk-test-storage-'));
   const deps: AppDeps = {
     prisma,
     clock,
+    logistics: simulatedLogistics,
+    ai: createFakeOrderReader(),
+    storage: createLocalStorage({
+      dir: storageDir,
+      secret: 'a-session-secret-that-is-long-enough-0123456789',
+    }),
     env: {
       DATABASE_URL: db.appUrl,
       SESSION_SECRET: 'a-session-secret-that-is-long-enough-0123456789',
@@ -40,6 +53,7 @@ export async function createTestDeps(opts: { now?: string } = {}): Promise<{
     async close() {
       await prisma.$disconnect();
       await db.drop();
+      rmSync(storageDir, { recursive: true, force: true });
     },
   };
 }

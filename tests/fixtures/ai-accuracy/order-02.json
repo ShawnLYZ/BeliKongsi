@@ -1,0 +1,22 @@
+{
+  "id": "order-02",
+  "text": "炼奶 4 ctn\n咖啡粉 2箱\ntea 1 ctn\n油 2 tin",
+  "expected": [
+    {
+      "productKey": "CM",
+      "quantity": 4
+    },
+    {
+      "productKey": "COFFEE",
+      "quantity": 2
+    },
+    {
+      "productKey": "TEA",
+      "quantity": 1
+    },
+    {
+      "productKey": "OIL",
+      "quantity": 2
+    }
+  ]
+}

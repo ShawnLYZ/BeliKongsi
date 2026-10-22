@@ -1,0 +1,22 @@
+{
+  "id": "order-06",
+  "text": "bekas tapao 2 ctn\nbeg plstik 1 ctn\ntelor gred A 4 papan\nsusu cair 2 ctn",
+  "expected": [
+    {
+      "productKey": "CONT",
+      "quantity": 2
+    },
+    {
+      "productKey": "BAGS",
+      "quantity": 1
+    },
+    {
+      "productKey": "EGG_A",
+      "quantity": 4
+    },
+    {
+      "productKey": "EM",
+      "quantity": 2
+    }
+  ]
+}

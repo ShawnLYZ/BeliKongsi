@@ -1,0 +1,27 @@
+{
+  "id": "order-20",
+  "text": "Hi boss, minggu ni order macam biasa ya 🙏\n炼奶 6箱\nminyak masak 2 tin\ntelur 10 papan\nkopi 1 ctn\ncawan 16oz 2 ctn\nTerima kasih! Kalau ada masalah call 012-345 6789",
+  "expected": [
+    {
+      "productKey": "CM",
+      "quantity": 6
+    },
+    {
+      "productKey": "OIL",
+      "quantity": 2
+    },
+    {
+      "productKey": "EGG_A",
+      "quantity": 10
+    },
+    {
+      "productKey": "COFFEE",
+      "quantity": 1
+    },
+    {
+      "productKey": "CUPS",
+      "quantity": 2
+    }
+  ],
+  "mustOfferAlternatives": [[], [], ["EGG_A", "EGG_B"], [], []]
+}

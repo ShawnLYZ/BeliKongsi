@@ -1,0 +1,15 @@
+{
+  "id": "order-14",
+  "text": "telur 5 papan\nsusu cair 2 ctn",
+  "expected": [
+    {
+      "productKey": "EGG_A",
+      "quantity": 5
+    },
+    {
+      "productKey": "EM",
+      "quantity": 2
+    }
+  ],
+  "mustOfferAlternatives": [["EGG_A", "EGG_B"], []]
+}

@@ -1,5 +1,7 @@
 // The PRD section 14 action codes. Every milestone logs with exactly these.
 export const ACTIONS = [
+  'shop.settings_changed',
+  'shop.setup_completed',
   'usual_list.ai_suggested',
   'usual_list.confirmed',
   'usual_list.item_updated',

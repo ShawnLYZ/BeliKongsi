@@ -1,0 +1,18 @@
+{
+  "id": "order-13",
+  "text": "sos cili 1 kotak\ntepung 2 guni\nkopi 1 ctn",
+  "expected": [
+    {
+      "productKey": null,
+      "quantity": 1
+    },
+    {
+      "productKey": "FLOUR",
+      "quantity": 2
+    },
+    {
+      "productKey": "COFFEE",
+      "quantity": 1
+    }
+  ]
+}

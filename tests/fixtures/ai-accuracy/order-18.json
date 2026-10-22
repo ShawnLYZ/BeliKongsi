@@ -1,0 +1,34 @@
+{
+  "id": "order-18",
+  "text": "炼奶 3箱\n淡奶 2箱\n油 5桶\n面粉 3袋\n咖啡粉 2箱\n塑料袋 1箱\n饭盒 2箱",
+  "expected": [
+    {
+      "productKey": "CM",
+      "quantity": 3
+    },
+    {
+      "productKey": "EM",
+      "quantity": 2
+    },
+    {
+      "productKey": "OIL",
+      "quantity": 5
+    },
+    {
+      "productKey": "FLOUR",
+      "quantity": 3
+    },
+    {
+      "productKey": "COFFEE",
+      "quantity": 2
+    },
+    {
+      "productKey": "BAGS",
+      "quantity": 1
+    },
+    {
+      "productKey": "CONT",
+      "quantity": 2
+    }
+  ]
+}

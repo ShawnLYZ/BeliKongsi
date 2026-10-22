@@ -1,0 +1,22 @@
+{
+  "id": "order-16",
+  "text": "susu pekat 3 ctn, minyak masak 2 tin\ntepung 1 guni dengan kopi 2 ctn",
+  "expected": [
+    {
+      "productKey": "CM",
+      "quantity": 3
+    },
+    {
+      "productKey": "OIL",
+      "quantity": 2
+    },
+    {
+      "productKey": "FLOUR",
+      "quantity": 1
+    },
+    {
+      "productKey": "COFFEE",
+      "quantity": 2
+    }
+  ]
+}

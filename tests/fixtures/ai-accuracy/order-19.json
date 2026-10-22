@@ -1,0 +1,22 @@
+{
+  "id": "order-19",
+  "text": "skm 4, evap 2\noil 3, flour 2",
+  "expected": [
+    {
+      "productKey": "CM",
+      "quantity": 4
+    },
+    {
+      "productKey": "EM",
+      "quantity": 2
+    },
+    {
+      "productKey": "OIL",
+      "quantity": 3
+    },
+    {
+      "productKey": "FLOUR",
+      "quantity": 2
+    }
+  ]
+}

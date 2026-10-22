@@ -44,7 +44,10 @@ describe('demo state and reset', () => {
     expect(await app.prisma.shop.count()).toBe(43);
     expect((await verifyLogChain(app.prisma)).valid).toBe(true);
     const entries = await app.prisma.activityLogEntry.findMany({ orderBy: { seq: 'asc' } });
-    expect(entries.map((e) => e.action)).toEqual(['demo.reset']);
+    // Seeding opens one round per product, so each reset also leaves twelve round.opened entries.
+    expect(entries.filter((e) => e.action === 'demo.reset')).toHaveLength(1);
+    expect(entries.filter((e) => e.action === 'round.opened')).toHaveLength(12);
+    expect(entries).toHaveLength(13);
   });
 
   it('sets the demo clock to the most recent Monday 06:05', async () => {
@@ -54,10 +57,13 @@ describe('demo state and reset', () => {
     expect(res.status).toBe(200);
     const expected = mostRecentMonday0605(new Date());
     expect(Math.abs(new Date(res.body.now).getTime() - expected.getTime())).toBeLessThan(5000);
+    const cmRound = await app.prisma.round.findFirstOrThrow({
+      where: { productId: seedId('product', 'CM'), status: 'open' },
+    });
     expect(res.body).toMatchObject({
       demoMode: true,
       featuredProductId: seedId('product', 'CM'),
-      featuredRoundId: null,
+      featuredRoundId: cmRound.id,
       bannerText: 'Made-up data: every business, person and product here is fictional.',
     });
     expect(res.body.basketWeek).toMatch(/^\d{4}-W\d{2}$/);

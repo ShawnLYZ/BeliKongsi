@@ -1,0 +1,18 @@
+{
+  "id": "order-03",
+  "text": "Hi, please send 3 cartons evaporated milk, 2 cartons carrier bags and 1 carton takeaway containers this week.",
+  "expected": [
+    {
+      "productKey": "EM",
+      "quantity": 3
+    },
+    {
+      "productKey": "BAGS",
+      "quantity": 2
+    },
+    {
+      "productKey": "CONT",
+      "quantity": 1
+    }
+  ]
+}

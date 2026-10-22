@@ -1,7 +1,10 @@
+import { readdir, readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { isoWeekOf } from '@/lib/time';
 import { systemCaller } from '@/server/platform/caller';
 import type { AppDeps } from '@/server/platform/deps';
 import { withTransaction, type TxContext } from '@/server/platform/tx';
+import { openNextRound } from '@/server/modules/rounds/open';
 import { CUTOFF_TIME, CUTOFF_WEEKDAY, PRODUCTS } from './catalogue';
 import { seedId } from './ids';
 import {
@@ -18,6 +21,23 @@ export { SAMPLE_ORDER_TEXT, SAMPLE_USUAL_PRICES_SEN } from './sample-order';
 
 export const SEED_VERSION = 'reference-1';
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+const PRODUCT_IMAGE_DIR = 'prisma/seed/assets/products';
+
+/** Copies the seed pictures into local storage; a missing or empty folder is fine. */
+export async function seedProductImages(deps: AppDeps): Promise<void> {
+  if (deps.env.STORAGE_ADAPTER !== 'local') return;
+  let files: string[];
+  try {
+    files = (await readdir(PRODUCT_IMAGE_DIR)).filter((f) => f.endsWith('.webp'));
+  } catch {
+    return;
+  }
+  for (const file of files) {
+    const bytes = await readFile(join(PRODUCT_IMAGE_DIR, file));
+    await deps.storage.putObject('product-images', file, bytes, 'image/webp');
+  }
+}
 
 /**
  * Inserts the reference data: network, catalogue, shops, people and usual lists. Reference rows
@@ -84,8 +104,8 @@ export async function seedReferenceData(
       buyAlonePriceSen: p.buyAlonePriceSen,
       aliases: p.aliases,
       packConversions: p.packConversions,
-      imageKey: null,
-      imageAiGenerated: false,
+      imageKey: p.imageKey ?? null,
+      imageAiGenerated: p.imageKey != null,
       cadence: p.cadence,
       scheduleAnchorWeek: anchorWeek,
       cutoffWeekday: CUTOFF_WEEKDAY,
@@ -179,8 +199,22 @@ export async function seedReferenceData(
   });
 }
 
+/**
+ * Temporary phase: opens the first round of every active product at the anchor so the dev
+ * database and demo tests have open rounds. M4 replaces it with seedCurrentWeek.
+ */
+async function openRoundsAtAnchor(ctx: TxContext, anchor: Date): Promise<void> {
+  const products = await ctx.tx.product.findMany({
+    where: { active: true },
+    select: { id: true },
+    orderBy: { id: 'asc' },
+  });
+  for (const { id } of products) await openNextRound(ctx, id, anchor);
+}
+
 /** Seeds the whole demo world in one transaction. */
 export async function seedDemo(deps: AppDeps, opts: { anchorMonday: Date }): Promise<void> {
+  await seedProductImages(deps);
   await withTransaction(
     deps,
     systemCaller('seed demo data'),
@@ -188,6 +222,7 @@ export async function seedDemo(deps: AppDeps, opts: { anchorMonday: Date }): Pro
       await seedReferenceData(ctx, opts);
       // Later milestones add their phases here, in this order: M9 seeds the history week, then
       // M4 seeds the current week.
+      await openRoundsAtAnchor(ctx, opts.anchorMonday);
     },
     { timeoutMs: 60_000 },
   );

@@ -1,6 +1,7 @@
 import type { Cadence, ProductCategory, UnitName } from '@/generated/prisma/client';
 import type { Tier } from '@/server/engine/types';
 import type { SupplierKey } from './network';
+import { imageKeyFor } from './image-subjects';
 
 export type ProductKey =
   | 'CM'
@@ -30,6 +31,8 @@ export interface SeedProduct {
   cadence: Cadence;
   aliases: string[];
   packConversions: Record<string, number>;
+  /** Storage key of the reviewed AI-generated picture, once approved. */
+  imageKey?: string;
 }
 
 const t = (minQuantity: number, unitPriceSen: number): Tier => ({ minQuantity, unitPriceSen });
@@ -41,6 +44,7 @@ export const CUTOFF_TIME = '20:00';
 export const PRODUCTS: readonly SeedProduct[] = [
   {
     key: 'CM',
+    imageKey: imageKeyFor('CM'),
     supplier: 'SUP_DRY',
     name: 'Sweetened condensed milk 390 g',
     shortName: 'condensed milk',
@@ -56,6 +60,7 @@ export const PRODUCTS: readonly SeedProduct[] = [
   },
   {
     key: 'EM',
+    imageKey: imageKeyFor('EM'),
     supplier: 'SUP_DRY',
     name: 'Evaporated milk 390 g',
     shortName: 'evaporated milk',
@@ -71,6 +76,7 @@ export const PRODUCTS: readonly SeedProduct[] = [
   },
   {
     key: 'OIL',
+    imageKey: imageKeyFor('OIL'),
     supplier: 'SUP_DRY',
     name: 'Cooking oil (palm olein) 17 kg',
     shortName: 'cooking oil',
@@ -86,6 +92,7 @@ export const PRODUCTS: readonly SeedProduct[] = [
   },
   {
     key: 'FLOUR',
+    imageKey: imageKeyFor('FLOUR'),
     supplier: 'SUP_DRY',
     name: 'Wheat flour 25 kg',
     shortName: 'flour',
@@ -101,6 +108,7 @@ export const PRODUCTS: readonly SeedProduct[] = [
   },
   {
     key: 'COFFEE',
+    imageKey: imageKeyFor('COFFEE'),
     supplier: 'SUP_DRY',
     name: 'Coffee powder 1 kg',
     shortName: 'coffee powder',
@@ -116,6 +124,7 @@ export const PRODUCTS: readonly SeedProduct[] = [
   },
   {
     key: 'TEA',
+    imageKey: imageKeyFor('TEA'),
     supplier: 'SUP_DRY',
     name: 'Black tea dust 1 kg',
     shortName: 'tea dust',
@@ -131,6 +140,7 @@ export const PRODUCTS: readonly SeedProduct[] = [
   },
   {
     key: 'EGG_A',
+    imageKey: imageKeyFor('EGG_A'),
     supplier: 'SUP_EGG',
     name: 'Grade A eggs',
     shortName: 'Grade A eggs',
@@ -146,6 +156,7 @@ export const PRODUCTS: readonly SeedProduct[] = [
   },
   {
     key: 'EGG_B',
+    imageKey: imageKeyFor('EGG_B'),
     supplier: 'SUP_EGG',
     name: 'Grade B eggs',
     shortName: 'Grade B eggs',
@@ -161,6 +172,7 @@ export const PRODUCTS: readonly SeedProduct[] = [
   },
   {
     key: 'CUPS',
+    imageKey: imageKeyFor('CUPS'),
     supplier: 'SUP_PACK',
     name: '16 oz plastic cups with lids',
     shortName: '16 oz cups',
@@ -176,6 +188,7 @@ export const PRODUCTS: readonly SeedProduct[] = [
   },
   {
     key: 'CONT',
+    imageKey: imageKeyFor('CONT'),
     supplier: 'SUP_PACK',
     name: '650 ml takeaway containers',
     shortName: 'takeaway containers',
@@ -191,6 +204,7 @@ export const PRODUCTS: readonly SeedProduct[] = [
   },
   {
     key: 'BAGS',
+    imageKey: imageKeyFor('BAGS'),
     supplier: 'SUP_PACK',
     name: 'Plastic carrier bags (medium)',
     shortName: 'carrier bags',
@@ -206,6 +220,7 @@ export const PRODUCTS: readonly SeedProduct[] = [
   },
   {
     key: 'KRAFT',
+    imageKey: imageKeyFor('KRAFT'),
     supplier: 'SUP_PACK',
     name: 'Kraft paper bags',
     shortName: 'paper bags',

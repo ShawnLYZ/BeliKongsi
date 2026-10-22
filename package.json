@@ -20,6 +20,9 @@
     "format:check": "prettier --check .",
     "check:secrets": "tsx scripts/check-secrets.ts",
     "prepare": "simple-git-hooks",
+    "ai:accuracy": "tsx scripts/ai-accuracy.ts",
+    "images:generate": "tsx scripts/generate-product-images.ts",
+    "images:sheet": "tsx scripts/product-image-sheet.ts",
     "db:dev": "tsx scripts/db-dev.ts",
     "db:migrate": "tsx scripts/assert-local-db.ts && prisma migrate dev",
     "db:setup-role": "tsx scripts/db-setup-role.ts",
@@ -54,8 +57,11 @@
     "pre-commit": "pnpm check:secrets --staged"
   },
   "dependencies": {
+    "@google/genai": "^2.30.0",
     "@prisma/adapter-pg": "7.10.1",
     "@prisma/client": "7.10.1",
+    "@supabase/supabase-js": "^2.118.0",
+    "@vis.gl/react-google-maps": "^1.10.1",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.5.0",
     "lucide-react": "^1.60.0",
@@ -64,6 +70,7 @@
     "radix-ui": "^1.8.1",
     "react": "~19.3.1",
     "react-dom": "~19.3.1",
+    "sharp": "^0.35.5",
     "sonner": "^2.0.8",
     "tw-animate-css": "^1.4.0",
     "zod": "^4.6.7"

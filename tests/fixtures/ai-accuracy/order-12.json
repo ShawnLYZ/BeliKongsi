@@ -1,0 +1,18 @@
+{
+  "id": "order-12",
+  "text": "gula 2 karung\nsusu pekat 3 ctn\nminyak masak 1 tin",
+  "expected": [
+    {
+      "productKey": null,
+      "quantity": 2
+    },
+    {
+      "productKey": "CM",
+      "quantity": 3
+    },
+    {
+      "productKey": "OIL",
+      "quantity": 1
+    }
+  ]
+}

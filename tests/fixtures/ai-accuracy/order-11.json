@@ -1,0 +1,14 @@
+{
+  "id": "order-11",
+  "text": "Assalamualaikum boss, saya Ah Hock dari Kedai Makan Contoh. Tolong hantar ke Taman Contoh sebelum Sabtu ya.\nsusu pekat 3 ctn\nminyak masak 2 tin\nKalau tiada stok boleh call saya 012-345 0000. Terima kasih!",
+  "expected": [
+    {
+      "productKey": "CM",
+      "quantity": 3
+    },
+    {
+      "productKey": "OIL",
+      "quantity": 2
+    }
+  ]
+}
