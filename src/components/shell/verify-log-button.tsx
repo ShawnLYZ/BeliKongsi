@@ -46,7 +46,7 @@ export function VerifyLogButton() {
       <p role="status" className="text-base font-semibold tabular-nums">
         {result ? (
           <span className={result.valid ? 'text-primary' : 'text-destructive'}>
-            {verifyResultText(result)}
+            <span aria-hidden>{result.valid ? '✅' : '❌'}</span> {verifyResultText(result)}
           </span>
         ) : null}
       </p>

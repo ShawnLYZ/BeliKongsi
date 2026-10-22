@@ -1,0 +1,130 @@
+'use client';
+
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import type { ApprovalView } from '@/server/modules/approvals/approvals';
+import { EmptyState } from '@/components/common/empty-state';
+import { Money } from '@/components/common/money';
+import { formatMyt } from '@/lib/format';
+import { cn } from '@/lib/utils';
+import { ApprovalPanel, evidenceOf, moneyCheckPassed } from './approval-panel';
+import { CheckMark } from './check-mark';
+import { TABLE, TABLE_WRAP, TD, TD_NUM, TH, TH_NUM } from './labels';
+
+/**
+ * The Ops approvals inbox: supplier orders and claims in tables, and the chosen approval in a
+ * panel beside them. Claims arrive in a later milestone (M8), so that table is empty for now.
+ */
+export function OpsInbox({ initialItems }: { initialItems: ApprovalView[] }) {
+  const router = useRouter();
+  const [items, setItems] = useState(initialItems);
+  const orders = items.filter((i) => i.type === 'supplier_order');
+  const claims = items.filter((i) => i.type === 'claim');
+  const [selectedId, setSelectedId] = useState<string | null>(orders[0]?.id ?? null);
+  const selected = items.find((i) => i.id === selectedId) ?? null;
+
+  function onDecided(id: string) {
+    const rest = items.filter((i) => i.id !== id);
+    setItems(rest);
+    setSelectedId(rest.find((i) => i.type === 'supplier_order')?.id ?? null);
+    router.refresh(); // updates the pending count in the top bar
+  }
+
+  return (
+    <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <div className="flex flex-col gap-5">
+        <section aria-labelledby="orders-title" className="flex flex-col gap-2">
+          <h2 id="orders-title" className="text-lg font-semibold">
+            Supplier orders <span className="tabular-nums">({orders.length})</span>
+          </h2>
+          {orders.length === 0 ? (
+            <EmptyState
+              title="No supplier orders waiting"
+              explanation="When a Kongsi round forms, its consolidated order waits here for your approval with the evidence."
+              example="Supplier order: 105 cartons of condensed milk, RM 15,330.00."
+            />
+          ) : (
+            <div className={TABLE_WRAP}>
+              <table className={TABLE}>
+                <caption className="sr-only">Supplier orders waiting for approval</caption>
+                <thead className="bg-muted">
+                  <tr>
+                    <th scope="col" className={TH}>
+                      Order
+                    </th>
+                    <th scope="col" className={TH_NUM}>
+                      Amount
+                    </th>
+                    <th scope="col" className={TH}>
+                      Check
+                    </th>
+                    <th scope="col" className={TH}>
+                      Drafted
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {orders.map((o) => {
+                    const e = evidenceOf(o);
+                    const current = o.id === selectedId;
+                    return (
+                      <tr
+                        key={o.id}
+                        className={cn('border-t', current ? 'bg-primary/10' : 'hover:bg-muted/50')}
+                      >
+                        <td className={TD}>
+                          <button
+                            type="button"
+                            aria-pressed={current}
+                            onClick={() => setSelectedId(o.id)}
+                            className="focus-visible:ring-ring/60 min-h-11 rounded-lg text-left font-semibold underline-offset-4 outline-none hover:underline focus-visible:ring-3"
+                          >
+                            {e.productName ?? o.summary}
+                            <span className="text-muted-foreground block font-normal">
+                              {e.supplierName}
+                            </span>
+                          </button>
+                        </td>
+                        <td className={TD_NUM}>
+                          {o.amountSen === null ? '—' : <Money sen={o.amountSen} />}
+                        </td>
+                        <td className={TD}>
+                          <CheckMark passed={moneyCheckPassed(e)} />
+                        </td>
+                        <td className={cn(TD, 'whitespace-nowrap')}>
+                          <time dateTime={o.createdAt}>{formatMyt(new Date(o.createdAt))}</time>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <section aria-labelledby="claims-title" className="flex flex-col gap-2">
+          <h2 id="claims-title" className="text-lg font-semibold">
+            Claims <span className="tabular-nums">({claims.length})</span>
+          </h2>
+          <EmptyState
+            title="No claims waiting"
+            explanation="When a shop reports missing or damaged goods, the claim waits here with its photos for your review."
+            example="Claim: 2 cartons of condensed milk damaged, RM 303.70."
+          />
+        </section>
+      </div>
+
+      <div className="lg:sticky lg:top-4">
+        {selected ? (
+          <ApprovalPanel key={selected.id} item={selected} onDecided={onDecided} />
+        ) : (
+          <EmptyState
+            title="Nothing to decide"
+            explanation="Choose a supplier order to see its evidence, then approve or reject it."
+          />
+        )}
+      </div>
+    </div>
+  );
+}

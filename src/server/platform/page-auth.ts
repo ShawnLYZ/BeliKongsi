@@ -20,3 +20,14 @@ export function requireOwnerShop(session: Session | null): { session: Session; s
   if (!shopId) redirect('/sign-in');
   return { session: owner, shopId };
 }
+
+/** For supplier pages: the supplier's session and supplier id. Anyone else goes to their own home. */
+export function requireSupplierPage(session: Session | null): {
+  session: Session;
+  supplierId: string;
+} {
+  const supplier = requirePageRole(session, ['supplier']);
+  const supplierId = supplier.membership.supplierId;
+  if (!supplierId) redirect('/sign-in');
+  return { session: supplier, supplierId };
+}

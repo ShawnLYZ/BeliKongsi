@@ -3,6 +3,7 @@ import { formatRM, formatUnits } from '@/lib/format';
 import type { CloseRoundResult } from '@/server/engine';
 import { appendLog } from '@/server/modules/activity/log';
 import { createApproval } from '@/server/modules/approvals/approvals';
+import { approvalLink } from '@/server/modules/approvals/links';
 import { balanceOf } from '@/server/modules/ledger/accounts';
 import { notify, TEMPLATES } from '@/server/modules/notifications/notify';
 import { requiredDispatchDate } from '@/server/modules/rounds/schedule';
@@ -95,7 +96,7 @@ export async function draftSupplierOrder(
   await notify(ctx, {
     type: 'ops.approval_needed',
     audience: { operator: true, roles: ['ops'] },
-    link: `/approvals/${approval.id}`,
+    link: approvalLink('supplier_order', order.id, approval.id),
     message: TEMPLATES['ops.approval_needed']({ shortName, totalSen }),
     dedupeKey: `ops.approval_needed:${approval.id}`,
   });

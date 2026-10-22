@@ -124,4 +124,56 @@ export const TEMPLATES = defineTemplates({
     const text = `Supplier order awaiting approval: ${data.shortName}, ${formatRM(data.totalSen)}.`;
     return () => ({ title: 'Supplier order awaiting approval', body: text, whatsappText: text });
   },
+  // Supplier only: Ops approved the order. The hub label is the region, never a shop.
+  'supplier.new_order': (data: {
+    quantity: number;
+    unitName: string;
+    shortName: string;
+    hubLabel: string;
+  }) => {
+    const text = `New BeliKongsi order: ${formatUnits(data.quantity, data.unitName)} of ${data.shortName} for the ${data.hubLabel}. Please confirm.`;
+    return () => ({ title: 'New order to confirm', body: text, whatsappText: text });
+  },
+  // Ops only: the supplier turned an order down.
+  'ops.supplier_rejected': (data: { supplierName: string; shortName: string; reason: string }) => {
+    const reason = data.reason.trim().replace(/[\s.,;:!?]+$/, '');
+    const text = `${data.supplierName} rejected the ${data.shortName} order: ${reason}.`;
+    // The full reason stays in the body; the WhatsApp text must fit the 300-character limit.
+    const prefix = `${data.supplierName} rejected the ${data.shortName} order: `;
+    const room = 300 - prefix.length - 2;
+    const short =
+      reason.length > room ? `${reason.slice(0, Math.max(room, 1) - 1).trimEnd()}…` : reason;
+    return () => ({
+      title: 'Supplier rejected an order',
+      body: text,
+      whatsappText: `${prefix}${short}.`,
+    });
+  },
+  // Owner only: the round was cancelled and everything the shop paid for it went back.
+  'owner.order_rejected': (data: {
+    by: 'ops' | 'supplier';
+    shortName: string;
+    refundSen: number;
+  }) => {
+    const text =
+      data.by === 'supplier'
+        ? `The supplier couldn't fill ${data.shortName} this week. Full refund: ${formatRM(data.refundSen)}.`
+        : `BeliKongsi cancelled the ${data.shortName} order this week. Full refund: ${formatRM(data.refundSen)}.`;
+    return () => ({ title: 'Order cancelled, full refund', body: text, whatsappText: text });
+  },
+  // Owner only: the supplier delivered fewer good units than were ordered; one message per shop.
+  'owner.shortfall': (data: {
+    missingUnits: number;
+    unitName: string;
+    shortName: string;
+    refundSen: number;
+  }) => {
+    const text = `The supplier delivered short. ${formatUnits(data.missingUnits, data.unitName)} of ${data.shortName} refunded: ${formatRM(data.refundSen)}.`;
+    return () => ({ title: 'Delivered short, refunded', body: text, whatsappText: text });
+  },
+  // Supplier only: the simulated payout for the good units counted at the hub.
+  'supplier.payout': (data: { amountSen: number; units: number; unitName: string }) => {
+    const text = `Payment released: ${formatRM(data.amountSen)} for ${formatUnits(data.units, data.unitName)} (simulated).`;
+    return () => ({ title: 'Payment released', body: text, whatsappText: text });
+  },
 });

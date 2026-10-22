@@ -19,8 +19,8 @@ export const homeFor = (role: Role): string => HOMES[role];
 
 export const roleLabel = (role: Role): string => LABELS[role];
 
-/** Owner and staff screens sit in a phone-width column; supplier and Ops screens use the full width. */
-export const usesPhoneColumn = (role: Role): boolean => role === 'owner' || role === 'staff';
+/** Owner, staff and supplier screens sit in a phone-width column; Ops screens use the full width. */
+export const usesPhoneColumn = (role: Role): boolean => role !== 'ops';
 
 /**
  * Where a page must send the visitor instead of rendering, or null when they may stay:

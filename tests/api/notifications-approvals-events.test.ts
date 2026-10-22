@@ -183,7 +183,7 @@ describe('approvals', () => {
     const view = await decide(nadia, id, { decision: 'approve' });
     expect(view).toMatchObject({
       status: 'approved',
-      link: `/approvals/${id}`,
+      link: '/ops',
       amountSen: 1533000,
     });
     expect(h.onApprove).toHaveBeenCalledTimes(1);

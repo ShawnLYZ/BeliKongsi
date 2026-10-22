@@ -1,6 +1,7 @@
 'use client';
 
 import { useId, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import type { ApprovalType } from '@/generated/prisma/enums';
@@ -178,14 +179,30 @@ function ApprovalCard({
             </form>
           ) : (
             <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => decide('approve')}
-                className={cn(ACTION, 'bg-primary text-primary-foreground hover:bg-primary-hover')}
-              >
-                Approve
-              </button>
+              {item.type === 'supplier_confirmation' ? (
+                // Confirming needs a dispatch date, which is asked for on the order itself.
+                <Link
+                  href={item.link}
+                  className={cn(
+                    ACTION,
+                    'bg-primary text-primary-foreground hover:bg-primary-hover',
+                  )}
+                >
+                  Open the order
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => decide('approve')}
+                  className={cn(
+                    ACTION,
+                    'bg-primary text-primary-foreground hover:bg-primary-hover',
+                  )}
+                >
+                  Approve
+                </button>
+              )}
               <button
                 type="button"
                 disabled={busy}

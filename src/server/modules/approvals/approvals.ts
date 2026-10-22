@@ -10,7 +10,13 @@ import type { Caller } from '@/server/platform/caller';
 import type { AppDeps } from '@/server/platform/deps';
 import { conflict, forbidden, notFound, unprocessable } from '@/server/platform/errors';
 import { withTransaction, type TxContext } from '@/server/platform/tx';
+import { approvalLink } from './links';
 import { skipDraftBasket } from '../baskets/lifecycle';
+import { approveSupplierOrder, rejectSupplierOrder } from '../supplier-orders/ops-decision';
+import {
+  confirmSupplierOrder,
+  rejectSupplierOrderBySupplier,
+} from '../supplier-orders/supplier-decision';
 
 type Json = Prisma.InputJsonValue;
 
@@ -124,7 +130,7 @@ async function toViews(
     },
     status: r.status,
     createdAt: r.createdAt.toISOString(),
-    link: `/approvals/${r.id}`,
+    link: approvalLink(r.type, r.subjectId, r.id),
   }));
 }
 
@@ -201,4 +207,18 @@ registerApprovalHandler('weekly_basket', {
   async onReject(ctx, request, input) {
     await skipDraftBasket(ctx, request.subjectId, input.reason?.trim() || null);
   },
+});
+
+// Ops approves a supplier order, or rejects it and the round is cancelled with full refunds. The
+// calls go through arrow functions because ops-decision imports this module back.
+registerApprovalHandler('supplier_order', {
+  onApprove: (ctx, request, input) => approveSupplierOrder(ctx, request, input),
+  onReject: (ctx, request, input) => rejectSupplierOrder(ctx, request, input),
+});
+
+// The supplier confirms with a dispatch date, or rejects and the round is cancelled with full
+// refunds. Arrow functions again, because supplier-decision imports this module back.
+registerApprovalHandler('supplier_confirmation', {
+  onApprove: (ctx, request, input) => confirmSupplierOrder(ctx, request, input),
+  onReject: (ctx, request, input) => rejectSupplierOrderBySupplier(ctx, request, input),
 });

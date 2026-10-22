@@ -24,6 +24,8 @@ interface RouteOptions<TBody, TQuery, TAuth extends RouteAuth> {
   query?: ZodType<TQuery>;
   /** Wraps the handler in withIdempotency, keyed by the Idempotency-Key header. JSON responses only. */
   idempotent?: boolean;
+  /** Scope the idempotency key by the query string too, for routes whose query changes what they do. */
+  idempotencyByQuery?: boolean;
   /** Largest request body, in bytes. Defaults to 1 MiB; photo endpoints use 8 MiB. */
   maxBodyBytes?: number;
 }
@@ -184,8 +186,9 @@ export function route<TBody = unknown, TQuery = unknown, TAuth extends RouteAuth
 
       if (!options.idempotent) return await handler(args);
 
-      const { pathname } = new URL(request.url);
-      const scope = `${session?.userId ?? 'anonymous'}:${request.method}:${pathname}`;
+      const { pathname, search } = new URL(request.url);
+      const where = options.idempotencyByQuery ? `${pathname}${search}` : pathname;
+      const scope = `${session?.userId ?? 'anonymous'}:${request.method}:${where}`;
       const stored = await withIdempotency(
         lazyDeps(),
         scope,

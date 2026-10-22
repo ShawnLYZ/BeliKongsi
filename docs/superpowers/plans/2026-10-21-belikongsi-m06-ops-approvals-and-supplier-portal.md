@@ -42,7 +42,7 @@
 
 ### Task 0: Re-sync
 
-- [ ] **Step 1:** `git switch -c m06-ops-approvals-and-supplier-portal`
+- [x] **Step 1:** The branch `m06-ops-approvals-and-supplier-portal` already exists and is checked out.
 - [ ] **Step 2:** Follow index §6. Confirm the consumed names:
   - M2: `registerApprovalHandler`, `decideApproval`, `listPendingApprovals`, `createApproval`, `post`, `runMoneyChecks`.
   - M1: `allocateShortfall`.
@@ -57,7 +57,7 @@
 **Files:**
 
 - Create: `src/server/modules/supplier-orders/ops-decision.ts`, `src/server/modules/rounds/cancel.ts`
-- Modify (test helpers): `tests/api/helpers/scans.ts` (add `expectNoShopIdentity`); `tests/api/helpers/scenarios.ts` (add `toFormed`, plus the index §4.5 lookups this milestone uses)
+- Modify (test helpers): `tests/api/helpers/scans.ts` (add `expectNoShopIdentity`); `tests/api/helpers/scenarios.ts` (add `toFormed`, `order(id)`, `round(id)`, `opsApprovalOf(supplierOrderId)`, `supplierApprovalOf(supplierOrderId)`, `allShopNames()`, `allShopIds()` and `SUP_DRY = seedId('supplier', 'SUP_DRY')`; `participationOf`, `feeChargeOf`, `roundOf`, `supplierOrderOf`, `lastWhatsapp` and `countWhatsapp` already exist). `balanceOf` comes from `@/server/modules/ledger/accounts`
 - Modify: `src/server/modules/notifications/templates.ts` (`supplier.new_order`, `owner.order_rejected`)
 - Test: `tests/api/ops-decision.test.ts`
 
@@ -65,10 +65,10 @@
 
 - Produces:
   - **The `supplier_order` approval handler:**
-    - **Approve:** the order becomes `awaiting_supplier` and the round `ordered`. It creates the approval `supplier_confirmation` (assignee `supplier`, `supplierId`, amount = total), logs `supplier_order.approved` and emits `supplier_order.approved { supplierOrderId, roundId, supplierId, quantity, totalSen }`. It notifies the supplier: `New BeliKongsi order: {units} of {shortName} for the {hub name}. Please confirm.`
+    - **Approve:** the order becomes `awaiting_supplier` and the round `ordered`. It creates the approval `supplier_confirmation` (assignee `supplier`, `supplierId`, amount = total), logs `supplier_order.approved` and emits `supplier_order.approved { supplierOrderId, roundId, supplierId, quantity, totalSen }`. It notifies the supplier (audience `{ supplierId, roles: ['supplier'] }`): `New BeliKongsi order: {units} of {shortName} for the {hubLabel}. Please confirm.` Here `{hubLabel}` is `` `${hub.region} hub` `` (`Klang Valley hub`), because `Hub.name` is the longer `Klang Valley hub (Shah Alam, Selangor)`. `hubName` in `SupplierOrderView` uses the same label. It also sets `supplierApprovalId` on the order. The handler registers through `registerApprovalHandler('supplier_order', …)`, and `createApproval` already takes `supplierId` and `assigneeRole: 'supplier'`.
     - **Reject:** the order becomes `rejected_by_ops`, then `cancelRoundWithRefunds(ctx, roundId, { by: 'ops', reason })`, and it logs `supplier_order.rejected_by_ops`.
   - `cancelRoundWithRefunds(ctx, roundId, input: { by: 'ops' | 'supplier'; reason: string }): Promise<{ refundedSen: number }>`:
-    - Every `kept` participation becomes `refunded_round_cancelled`, posting `round_hold → shop_balance` (`refund_round_cancelled`) for its `finalLine`, so the hold ends at 0.
+    - Every `kept` participation becomes `refunded_round_cancelled`, posting `round_hold → shop_balance` (`refund_round_cancelled`) for its `finalAllInSen × quantity`, so the hold ends at 0.
     - `refundDeliveryFeeIfUnused` runs for each door shop and date.
     - The round becomes `cancelled`. It logs `refund.issued` per shop and emits `round.cancelled { roundId, by, reasonCode }` and `refund.issued { kind: 'full' }`.
     - Owners get one message per shop:
@@ -93,10 +93,11 @@ it('lets only Ops approve supplier orders', async () => {
     (await (await app.as('farid')).post(`/api/approvals/${opsApprovalOf(cmOrder)}/approve`, {}))
       .status,
   ).toBe(403);
+  // The approve route only admits supplier and ops sessions, so an owner is refused with 403.
   expect(
     (await (await app.as('ahSeng')).post(`/api/approvals/${opsApprovalOf(cmOrder)}/approve`, {}))
       .status,
-  ).toBe(404);
+  ).toBe(403);
 });
 it('needs a reason to reject, then refunds everyone in full (stories 65, 120)', async () => {
   const n = await app.as('nadia');
@@ -134,10 +135,11 @@ it('keeps Gerai Contoh’s delivery fee when its other door lines are still kept
 
 - Produces:
   - **The `supplier_confirmation` approval handler:**
-    - **Approve:** needs `expectedDispatchDate` (`YYYY-MM-DD`, not before today in MYT; 400 otherwise). The order becomes `confirmed`, with `confirmedAt` and the date; the round becomes `confirmed`. It logs `supplier_order.confirmed` and emits `supplier_order.confirmed`.
-    - **Reject:** needs a reason. The order becomes `rejected_by_supplier`, then `cancelRoundWithRefunds(by 'supplier')`. Ops are notified: `{Supplier name} rejected the {shortName} order: {reason}.` It logs `supplier_order.rejected_by_supplier` and emits `supplier_order.rejected`.
+    - **Approve:** needs `expectedDispatchDate` (`YYYY-MM-DD`, not before today in MYT, using `mytDate(ctx.now)` from `src/lib/time.ts`; 400 `badRequest` otherwise). The approve route's schema (`z.iso.date().optional()`) already rejects a malformed date with 400 and passes the value to the handler as `input.expectedDispatchDate`; the handler throws 400 when it is missing or in the past, and the transaction rolls back. A reject without a reason is already refused by `decideApproval` with 422 `REASON_REQUIRED`. The order becomes `confirmed`, with `confirmedAt` and the date; the round becomes `confirmed`. It logs `supplier_order.confirmed` and emits `supplier_order.confirmed`.
+    - **Reject:** needs a reason. The order becomes `rejected_by_supplier`, then `cancelRoundWithRefunds(by 'supplier')`. Ops are notified (audience `{ operator: true, roles: ['ops'] }`): `{Supplier name} rejected the {shortName} order: {reason}.` It logs `supplier_order.rejected_by_supplier` and emits `supplier_order.rejected`.
   - `markDispatched(deps, caller, supplierOrderId)`: the own supplier only (another supplier gets 404); the order must be `confirmed`, otherwise 409. The order and the round become `dispatched`; it logs and emits `supplier_order.dispatched`.
   - Views. None of them contain shop names or ids:
+    - Supplier route guard: `requireSupplierAccess(caller, supplierId)` from `src/server/platform/permissions.ts` (another supplier gets 404, owners and staff 403). For `/api/supplier-orders/[id]/dispatched`, look up the order and answer 404 when it belongs to another supplier.
     - `SupplierOrderView = { supplierOrderId; roundId; productName; packDescription; unitName; quantity; unitPriceSen; totalSen; hubName; requiredDispatchDate; expectedDispatchDate: string | null; status; approvalId: string | null }`
     - `SupplierOpenRoundView = { roundId; productName; cutoffAt; totalQuantity; shopCount; currentTier }`
     - `SupplierProductView = { productId; name; packDescription; unitName; buyAlonePriceSen; tiers: TierView[]; cadence; cutoffWeekday; cutoffTime; active }`
@@ -232,17 +234,17 @@ it('lists the supplier’s products and tiers read-only (story 109)', async () =
   - `previewHubCheck(deps, caller, supplierOrderId, input: { goodUnits: number; damagedUnits: number; notes?: string }): Promise<HubCheckPreview>`. Ops only; no writes.
     - `HubCheckPreview = { orderedQuantity; receivedCounted; excessUnits; excessFlag; allocations: { participationId; shopName; joinedAt; quantity; allocated; missing; refundSen }[]; supplierPayableSen; feeRevenueSen; logisticsPayableSen; shortfallRefundSen }`
   - `recordHubCheck(deps, caller, supplierOrderId, input): Promise<HubCheckView>`. Ops only; the order must be `dispatched` (otherwise 409, including a second check). In one transaction:
-    1. Engine `allocateShortfall` over the `kept` participations; `goodUnitsReceived` is capped at `acceptedQuantity`.
+    1. Engine `allocateShortfall({ kept: [{ id, quantity, joinedAt (ISO), final: { goodsSen, feeSen, shippingSen, allInSen } }], goodUnitsReceived, finalGoodsPriceSen })` over the `kept` participations (`final` is built from `finalGoodsSen`, `finalFeeSen`, `unitShippingSen` and `finalAllInSen`; `finalGoodsPriceSen` is `round.finalUnitPriceSen`). The engine already caps the count at the ordered quantity (`receivedCounted`) and reports `excessUnits` and `excessFlag`; lock the round `FOR UPDATE` first, then the kept participations, then the shops in id order (the payments lock order). It returns `AllocationResult[]` of `{ id, allocated, missing, refundSen }` where `id` is the participation id.
     2. `Allocation` rows. Participations become `allocated`, or `shorted` when allocated is 0.
     3. Shortfall refunds: `refund_shortfall`, and the owner message `The supplier delivered short. {units} of {shortName} refunded: {RM}.`, aggregated per shop.
     4. Settlement postings: `settlement_supplier`, `settlement_fee`, `settlement_logistics`. Zero amounts are skipped.
-    5. `payments.payout(...)`, then `supplier_payable → partner_cash` (`supplier_payout`).
-    6. `HubCheck` row.
+    5. `deps.payments.payout({ supplierOrderId, supplierId, amountSen }) → { reference }` (the simulated partner; call it even for 0 so `HubCheck.payoutReference` is set, but post nothing for 0), then `supplier_payable → partner_cash` (`supplier_payout`).
+    6. `HubCheck` row (`goodUnits`, `damagedUnits`, `notes`, `checkedByUserId`, `checkedAt`, `receivedCounted`, `shortfallUnits`, `excessUnits`, `payoutSen`, `payoutReference`). The `refund_*` postings carry `participationId` and come from the round hold, which the money check `participation_paid_equals_refunds_plus_allocated` relies on.
     7. The order becomes `settled`; the round `at_hub`.
     8. Logs: `hub.check_recorded`, `hub.shortfall_allocated` (when there's a shortfall), `hub.supplier_payout_released`.
     9. Events: `hub_check.recorded { supplierOrderId, goodUnits, damagedUnits, shortfall }`, `supplier_payout.released { supplierId, supplierOrderId, amountSen }`, and `refund.issued { kind: 'shortfall' }`.
     10. The supplier is notified: `Payment released: {RM} for {units} (simulated).`
-    11. **M7 extension point:** an empty `planConsignmentsAndPickups(ctx, roundId)` call placed after the allocations are written.
+    11. **M7 extension point:** `planConsignmentsAndPickups` does not exist yet (there is no `fulfilment` module). Leave a comment at that point in `recordHubCheck` for M7; do not add an empty stub export.
   - The route: `POST /api/supplier-orders/{id}/hub-check` with `?preview=true` for the preview.
 
 - [ ] **Step 1: Write the failing tests.** The condensed milk order is dispatched.
@@ -323,7 +325,8 @@ it('refuses a second hub check', async () => {
     - the engine result summary
     - the ledger summary: the hold balance and postings by kind
     - the round's money check
-  - `moneyOverview(deps, caller): Promise<{ heldPerOpenRound: { roundId; productName; heldSen }[]; refundsByKind: Record<string, number>; supplierPayoutsSen; feeRevenueSen; logisticsPayableSen; deliveryFeesHeldSen; claimsExpenseSen; partnerCashSen; checks: MoneyCheckResult[] }>`. The checks come from `runMoneyChecks`, and each failure links to `/ops/rounds/<id>`.
+  - Task 0 note: the figures in the first Task 4 test (10 formed, 1 failed, 1 empty; `averageTier` 2.0) are not confirmed against the code. Check them against the real board after the demo skip, and fix the test numbers, not the formula.
+  - `moneyOverview(deps, caller): Promise<{ heldPerOpenRound: { roundId; productName; heldSen }[]; refundsByKind: Record<string, number>; supplierPayoutsSen; feeRevenueSen; logisticsPayableSen; deliveryFeesHeldSen; claimsExpenseSen; partnerCashSen; checks: MoneyCheck[] }>`. `MoneyCheck = { id: MoneyCheckId; label; passed; failures: { roundId?; participationId?; detail }[] }` comes from `runMoneyChecks(prisma): Promise<MoneyReport>` (`{ allPassed, checks }`) in `ledger/checks.ts`, and each failure with a `roundId` links to `/ops/rounds/<id>`.
 
 - [ ] **Step 1: Write the failing tests:**
 
@@ -364,10 +367,10 @@ it('keeps the board and money overview from other roles', async () => {
 **Files:**
 
 - Create:
-  - Ops pages: `src/app/(shell)/ops/page.tsx` (approvals inbox), `src/app/(shell)/ops/rounds/page.tsx`, `src/app/(shell)/ops/rounds/[roundId]/page.tsx`, `src/app/(shell)/ops/supplier-orders/[id]/page.tsx`, `src/app/(shell)/ops/money/page.tsx`
-  - Supplier pages: `src/app/(shell)/supplier/page.tsx`, `src/app/(shell)/supplier/orders/[id]/page.tsx`, `src/app/(shell)/supplier/rounds/page.tsx`, `src/app/(shell)/supplier/products/page.tsx`, `src/app/(shell)/supplier/payouts/page.tsx`
+  - Ops pages: `src/app/(shell)/ops/page.tsx` (exists as a placeholder; replace it with the approvals inbox), `src/app/(shell)/ops/rounds/page.tsx`, `src/app/(shell)/ops/rounds/[roundId]/page.tsx`, `src/app/(shell)/ops/supplier-orders/[id]/page.tsx`, `src/app/(shell)/ops/money/page.tsx`
+  - Supplier pages: `src/app/(shell)/supplier/page.tsx` (exists as a placeholder; replace it), `src/app/(shell)/supplier/orders/[id]/page.tsx`, `src/app/(shell)/supplier/rounds/page.tsx`, `src/app/(shell)/supplier/products/page.tsx`, `src/app/(shell)/supplier/payouts/page.tsx`
   - Components: `src/components/ops/*`, `src/components/supplier/*`
-- Modify: `src/app/(shell)/activity/page.tsx` (Ops gets a "Verify log" button with its result)
+- Note: the Ops "Verify log" button already exists on `src/app/(shell)/activity/page.tsx` (`VerifyLogButton`); only link to it.
 
 - [ ] **Step 1: Build the Ops screens.**
   - **Inbox:** supplier orders and claims, the latter shown empty until M8.

@@ -155,3 +155,56 @@ export async function lastWhatsapp(
 export async function countWhatsapp(userKey: SeedUserKey, type: string): Promise<number> {
   return getDeps().prisma.notification.count({ where: { userId: seedId('user', userKey), type } });
 }
+
+export const SUP_DRY = seedId('supplier', 'SUP_DRY');
+
+/**
+ * Kedai Kopi Contoh sets up and pays its basket, then the demo skips to the cut-off: the formed
+ * rounds each have a supplier order waiting for Ops.
+ */
+export async function toFormed(app: TestApp): Promise<void> {
+  await setupKedaiKopi(app);
+  await payBasket(app, 'ahSeng', (await basketIdOf('KEDAI_KOPI', '2026-W45'))!);
+  const res = await (await app.as('nadia')).post('/api/demo/skip-to-cutoff');
+  if (res.status !== 200) throw new Error(`skip to cut-off failed: ${res.status}`);
+}
+
+/** A supplier order by id. Throws when there is none. */
+export async function order(id: string) {
+  return getDeps().prisma.supplierOrder.findUniqueOrThrow({ where: { id } });
+}
+
+/** A round by id. Throws when there is none. */
+export async function round(id: string) {
+  return getDeps().prisma.round.findUniqueOrThrow({ where: { id } });
+}
+
+/** The id of the Ops approval for a supplier order. Throws when it has none. */
+export async function opsApprovalOf(supplierOrderId: string): Promise<string> {
+  const row = await getDeps().prisma.approvalRequest.findFirstOrThrow({
+    where: { type: 'supplier_order', subjectId: supplierOrderId },
+    select: { id: true },
+  });
+  return row.id;
+}
+
+/** The id of the supplier's confirmation approval for a supplier order. Throws when it has none. */
+export async function supplierApprovalOf(supplierOrderId: string): Promise<string> {
+  const row = await getDeps().prisma.approvalRequest.findFirstOrThrow({
+    where: { type: 'supplier_confirmation', subjectId: supplierOrderId },
+    select: { id: true },
+  });
+  return row.id;
+}
+
+/** Every shop's name. */
+export async function allShopNames(): Promise<string[]> {
+  const rows = await getDeps().prisma.shop.findMany({ select: { name: true } });
+  return rows.map((r) => r.name);
+}
+
+/** Every shop's id. */
+export async function allShopIds(): Promise<string[]> {
+  const rows = await getDeps().prisma.shop.findMany({ select: { id: true } });
+  return rows.map((r) => r.id);
+}
