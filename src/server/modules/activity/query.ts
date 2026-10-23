@@ -2,6 +2,7 @@ import type { ActorType, Prisma, Role } from '@/generated/prisma/client';
 import type { Caller } from '@/server/platform/caller';
 import type { AppDeps } from '@/server/platform/deps';
 import { toPage } from '@/server/platform/pagination';
+import { relatedSubjects, type Subject } from './related';
 
 export type LogEntryView = {
   seq: string;
@@ -41,7 +42,14 @@ function stripMoney(value: Prisma.JsonValue | null): Prisma.JsonValue | null {
 export async function queryLog(
   deps: AppDeps,
   caller: Caller,
-  filter: { subjectType?: string; subjectId?: string; cursor: string | null; limit: number },
+  filter: {
+    subjectType?: string;
+    subjectId?: string;
+    /** Entries about any of these subjects; used instead of `subjectType` and `subjectId`. */
+    subjects?: Subject[];
+    cursor: string | null;
+    limit: number;
+  },
 ): Promise<{ items: LogEntryView[]; nextCursor: string | null }> {
   const where: Prisma.ActivityLogEntryWhereInput = {};
   const redact = caller.kind === 'person' && caller.session.membership.role === 'staff';
@@ -53,8 +61,12 @@ export async function queryLog(
     else if (role === 'supplier') where.supplierId = supplierId ?? '';
     // ops sees everything
   }
-  if (filter.subjectType) where.subjectType = filter.subjectType;
-  if (filter.subjectId) where.subjectId = filter.subjectId;
+  if (filter.subjects) {
+    where.OR = filter.subjects.map((s) => ({ subjectType: s.type, subjectId: s.id }));
+  } else {
+    if (filter.subjectType) where.subjectType = filter.subjectType;
+    if (filter.subjectId) where.subjectId = filter.subjectId;
+  }
   if (filter.cursor !== null) {
     if (!/^\d+$/.test(filter.cursor)) return { items: [], nextCursor: null };
     where.seq = { lt: BigInt(filter.cursor) };
@@ -96,18 +108,23 @@ export async function queryLog(
 
 /**
  * The newest entries about one subject (visibility rules of queryLog apply). Returns the first
- * page; pass `cursor` (a previous `nextCursor`) for older entries.
+ * page; pass `cursor` (a previous `nextCursor`) for older entries. With `related`, the steps
+ * logged on the item's pickup, delivery check and claim are included too.
  */
 export async function subjectTimeline(
   deps: AppDeps,
   caller: Caller,
   subjectType: string,
   subjectId: string,
-  page: { cursor?: string | null; limit?: number } = {},
+  page: { cursor?: string | null; limit?: number; related?: boolean } = {},
 ): Promise<{ items: LogEntryView[]; nextCursor: string | null }> {
+  const subjects = page.related
+    ? await relatedSubjects(deps.prisma, subjectType, subjectId)
+    : undefined;
   return queryLog(deps, caller, {
     subjectType,
     subjectId,
+    ...(subjects ? { subjects } : {}),
     cursor: page.cursor ?? null,
     limit: page.limit ?? 50,
   });

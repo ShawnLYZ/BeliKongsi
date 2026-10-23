@@ -34,66 +34,76 @@ export async function updateConsignmentStatus(
 ): Promise<ConsignmentView> {
   requireOps(caller);
   if (!UUID.test(consignmentId)) throw notFound('Consignment');
-  await withTransaction(deps, caller, async (ctx) => {
-    const { tx } = ctx;
-    const head = await tx.consignment.findUnique({
-      where: { id: consignmentId },
-      select: { destinationKey: true, shopId: true },
-    });
-    if (!head) throw notFound('Consignment');
-    // Same lock order as the hub check: the shop first, then the destination (planning's lock),
-    // so no hub check joins this consignment while it leaves.
-    if (head.shopId) await lockShop(ctx, head.shopId);
-    await lockDestinations(ctx, [head.destinationKey]);
-    const c = await tx.consignment.findUniqueOrThrow({ where: { id: consignmentId } });
-
-    if (nextConsignmentStep(c.destinationType, c.status) !== status) {
-      throw conflict(
-        'INVALID_TRANSITION',
-        `A ${c.destinationType === 'door' ? 'door' : 'pickup point'} consignment cannot go from ${c.status} to ${status}.`,
-      );
-    }
-    const history = [...(c.statusHistory as Prisma.JsonArray), historyEntry(ctx, status)];
-    await tx.consignment.update({
-      where: { id: c.id },
-      data: { status, statusHistory: history },
-    });
-
-    let deliveryFeeSen = 0;
-    if (c.destinationType === 'door' && status === 'dispatched') {
-      deliveryFeeSen = await handOverDeliveryFee(ctx, c);
-    }
-
-    const destinationId = c.destinationType === 'door' ? c.shopId! : c.pickupPointId!;
-    await appendLog(ctx, {
-      action: 'fulfilment.consignment_status_changed',
-      subjectType: 'consignment',
-      subjectId: c.id,
-      scope: { operator: true, ...(c.shopId ? { shopId: c.shopId } : {}) },
-      before: { status: c.status },
-      after: { status, ...(deliveryFeeSen > 0 ? { deliveryFeeToPartnerSen: deliveryFeeSen } : {}) },
-    });
-    await emitEvent(ctx, 'consignment.status_changed', {
-      consignmentId: c.id,
-      hubId: c.hubId,
-      destinationType: c.destinationType,
-      destinationId,
-      status,
-    });
-
-    const pickups = await tx.allocation.findMany({
-      where: { consignmentId: c.id, pickupId: { not: null } },
-      select: { pickupId: true },
-    });
-    const pickupIds = pickups.map((a) => a.pickupId!);
-    await refreshPickupReadiness(ctx, pickupIds);
-    // Background shops collect on their own once goods are at the pickup point or delivered.
-    if (status === 'arrived' || status === 'delivered') {
-      await runBackgroundAutomation(ctx, pickupIds);
-    }
-  });
+  await withTransaction(deps, caller, (ctx) => changeConsignmentStatus(ctx, consignmentId, status));
   const [view] = await viewsOf(deps, { id: consignmentId });
   return view!;
+}
+
+/**
+ * The step itself, in the caller's transaction (see `updateConsignmentStatus`; also the seed).
+ * It checks no access: callers must have checked that the caller is Ops.
+ */
+export async function changeConsignmentStatus(
+  ctx: TxContext,
+  consignmentId: string,
+  status: PartnerStatus,
+): Promise<void> {
+  const { tx } = ctx;
+  const head = await tx.consignment.findUnique({
+    where: { id: consignmentId },
+    select: { destinationKey: true, shopId: true },
+  });
+  if (!head) throw notFound('Consignment');
+  // Same lock order as the hub check: the shop first, then the destination (planning's lock),
+  // so no hub check joins this consignment while it leaves.
+  if (head.shopId) await lockShop(ctx, head.shopId);
+  await lockDestinations(ctx, [head.destinationKey]);
+  const c = await tx.consignment.findUniqueOrThrow({ where: { id: consignmentId } });
+
+  if (nextConsignmentStep(c.destinationType, c.status) !== status) {
+    throw conflict(
+      'INVALID_TRANSITION',
+      `A ${c.destinationType === 'door' ? 'door' : 'pickup point'} consignment cannot go from ${c.status} to ${status}.`,
+    );
+  }
+  const history = [...(c.statusHistory as Prisma.JsonArray), historyEntry(ctx, status)];
+  await tx.consignment.update({
+    where: { id: c.id },
+    data: { status, statusHistory: history },
+  });
+
+  let deliveryFeeSen = 0;
+  if (c.destinationType === 'door' && status === 'dispatched') {
+    deliveryFeeSen = await handOverDeliveryFee(ctx, c);
+  }
+
+  const destinationId = c.destinationType === 'door' ? c.shopId! : c.pickupPointId!;
+  await appendLog(ctx, {
+    action: 'fulfilment.consignment_status_changed',
+    subjectType: 'consignment',
+    subjectId: c.id,
+    scope: { operator: true, ...(c.shopId ? { shopId: c.shopId } : {}) },
+    before: { status: c.status },
+    after: { status, ...(deliveryFeeSen > 0 ? { deliveryFeeToPartnerSen: deliveryFeeSen } : {}) },
+  });
+  await emitEvent(ctx, 'consignment.status_changed', {
+    consignmentId: c.id,
+    hubId: c.hubId,
+    destinationType: c.destinationType,
+    destinationId,
+    status,
+  });
+
+  const pickups = await tx.allocation.findMany({
+    where: { consignmentId: c.id, pickupId: { not: null } },
+    select: { pickupId: true },
+  });
+  const pickupIds = pickups.map((a) => a.pickupId!);
+  await refreshPickupReadiness(ctx, pickupIds);
+  // Background shops collect on their own once goods are at the pickup point or delivered.
+  if (status === 'arrived' || status === 'delivered') {
+    await runBackgroundAutomation(ctx, pickupIds);
+  }
 }
 
 /**

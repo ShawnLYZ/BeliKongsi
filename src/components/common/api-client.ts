@@ -29,11 +29,27 @@ export type ApiFetchDeps = {
 const NETWORK_MESSAGE = 'Could not reach BeliKongsi. Check your connection and try again.';
 const FALLBACK_MESSAGE = 'Something went wrong. Please try again.';
 
+/** What to do next, by status, for a server message that only says what happened (PRD §22). */
+const NEXT_STEPS: Partial<Record<number, string>> = {
+  400: 'Check what you entered and try again.',
+  403: 'Switch to an account that can do this.',
+  404: 'Refresh the page to see the latest.',
+  409: 'Refresh the page to see the latest.',
+  422: 'Check the details and try again.',
+  503: 'Please try again in a minute.',
+};
+const SAYS_NEXT_STEP = /\b(please|try|refresh|check)\b/i;
+
+function withNextStep(message: string, status: number): string {
+  if (SAYS_NEXT_STEP.test(message)) return message;
+  return `${message} ${NEXT_STEPS[status] ?? 'Please try again.'}`;
+}
+
 function toApiError(status: number, data: unknown): ApiError {
   if (data && typeof data === 'object') {
     const { code, message, details } = data as Record<string, unknown>;
     if (typeof code === 'string' && typeof message === 'string') {
-      return new ApiError(code, message, status, details);
+      return new ApiError(code, withNextStep(message, status), status, details);
     }
   }
   return new ApiError('INTERNAL', FALLBACK_MESSAGE, status);

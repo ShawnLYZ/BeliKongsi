@@ -92,7 +92,13 @@ describe('Orders before Ops approval', () => {
 
   it('are hidden while awaiting Ops', async () => {
     const farid = await app.as('farid');
-    expect((await farid.get(`/api/suppliers/${SUP_DRY}/orders`)).body.items).toEqual([]);
+    // Farid sees only the history week's orders, which Ops approved a week earlier.
+    const items = (await farid.get(`/api/suppliers/${SUP_DRY}/orders`)).body.items as {
+      supplierOrderId: string;
+      status: string;
+    }[];
+    expect(items.map((o) => o.supplierOrderId)).not.toContain(cmOrder);
+    expect(items.map((o) => o.status)).not.toContain('awaiting_ops');
     const ops = await (await app.as('nadia')).get(`/api/suppliers/${SUP_DRY}/orders`);
     expect(ops.body.items.length).toBeGreaterThan(0);
   });
@@ -110,8 +116,10 @@ describe('Approval links', () => {
       (a: { subjectId: string }) => a.subjectId === cmOrder,
     );
     expect(mine.link).toBe(`/supplier/orders/${cmOrder}`);
+    // The newest one: the history week's orders were announced a week earlier.
     const note = await app.prisma.notification.findFirstOrThrow({
       where: { type: 'supplier.new_order' },
+      orderBy: { createdAt: 'desc' },
     });
     expect(note.link).toBe(`/supplier/orders/${cmOrder}`);
   });

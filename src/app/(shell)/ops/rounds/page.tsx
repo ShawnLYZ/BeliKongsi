@@ -1,3 +1,4 @@
+import { EmptyState } from '@/components/common/empty-state';
 import { RoundsBoard } from '@/components/ops/rounds-board';
 import { opsRoundsBoard } from '@/server/modules/ops/rounds-board';
 import { personCaller } from '@/server/platform/caller';
@@ -17,7 +18,15 @@ export default async function OpsRoundsPage() {
         <h1 className="text-2xl font-bold">Rounds board</h1>
         <p className="mt-1 text-base">Every Kongsi round by status, newest cut-off first.</p>
       </div>
-      <RoundsBoard board={board} />
+      {board.columns.every((col) => col.rounds.length === 0) ? (
+        <EmptyState
+          title="No rounds yet"
+          explanation="Every Kongsi round appears here in a column for its status, with its supplier, hub and cycle."
+          example="Evaporated milk 390 g · Pembekal Barang Kering Contoh · Klang Valley hub · Open, 57 of 100 cartons."
+        />
+      ) : (
+        <RoundsBoard board={board} />
+      )}
     </div>
   );
 }

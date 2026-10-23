@@ -45,7 +45,7 @@ export function OrderCard({
           {linkToDetail ? (
             <Link
               href={`/supplier/orders/${order.supplierOrderId}`}
-              className="focus-visible:ring-ring/60 rounded-sm underline underline-offset-4 outline-none hover:no-underline focus-visible:ring-3"
+              className="focus-visible:ring-ring/60 inline-flex min-h-11 items-center rounded-sm underline underline-offset-4 outline-none hover:no-underline focus-visible:ring-3"
             >
               {formatUnits(order.quantity, order.unitName)} of {order.productName}
             </Link>

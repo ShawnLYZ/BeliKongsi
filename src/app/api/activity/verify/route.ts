@@ -1,4 +1,5 @@
 import { appendLog, verifyLogChain } from '@/server/modules/activity/log';
+import { recentLogCheck } from '@/server/modules/activity/verify-cache';
 import { json, route } from '@/server/platform/http';
 import { withTransaction } from '@/server/platform/tx';
 
@@ -17,4 +18,14 @@ export const POST = route({ auth: ['ops'] }, async ({ deps, caller }) => {
     }),
   );
   return json(result);
+});
+
+/**
+ * The check without a log entry, for owners' timelines. Owners only learn whether the log is
+ * intact; the entry count and first broken entry stay with Ops.
+ */
+export const GET = route({ auth: ['owner', 'ops'] }, async ({ deps, caller }) => {
+  const result = await recentLogCheck(deps);
+  const ops = caller.kind === 'person' && caller.session.membership.role === 'ops';
+  return json(ops ? result : { valid: result.valid });
 });

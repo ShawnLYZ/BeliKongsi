@@ -77,7 +77,7 @@ describe('A whole week through the API (story 181)', () => {
     expect(diffs.filter((r) => r.shopId === KEDAI).map((r) => r.amountSen)).toEqual([7344]);
     // Kafe's egg round did not reach its minimum, so its 10 trays are refunded in full.
     const dropped = await app.prisma.ledgerPosting.findMany({
-      where: { kind: 'refund_dropped', shopId: KAFE },
+      where: { kind: 'refund_dropped', shopId: KAFE, roundId: (await roundOf('EGG_B', WEEK)).id },
     });
     expect(dropped.map((r) => r.amountSen)).toEqual([12330]);
   });

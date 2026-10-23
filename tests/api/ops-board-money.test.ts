@@ -42,11 +42,13 @@ describe('The Ops rounds board and money overview', () => {
     const wentFurther = ['formed', 'ordered', 'confirmed', 'dispatched', 'at_hub', 'completed']
       .map(count)
       .reduce((a: number, n: number) => a + n, 0);
-    expect(wentFurther).toBe(10);
-    expect(count('failed')).toBe(1);
+    // This week: 10 formed, tea failed, kraft bags empty. The history week: 7 completed (tiers
+    // 2, 2, 3, 1, 2, 2 and 1) and tea failed.
+    expect(wentFurther).toBe(17);
+    expect(count('failed')).toBe(2);
     expect(count('empty')).toBe(1);
-    expect(b.stats.successRate).toBeCloseTo(10 / 11, 5);
-    expect(b.stats.averageTier).toBeCloseTo(2.0, 5);
+    expect(b.stats.successRate).toBeCloseTo(17 / 19, 5);
+    expect(b.stats.averageTier).toBeCloseTo((10 * 2.0 + 13) / 17, 5);
     expect(b.stats.averageShopsPerRound).toBeGreaterThan(0);
   });
 
@@ -54,7 +56,7 @@ describe('The Ops rounds board and money overview', () => {
     const res = await (await app.as('nadia')).get('/api/ops/rounds?status=failed');
     expect(res.body.columns).toHaveLength(1);
     expect(res.body.columns[0].status).toBe('failed');
-    expect(res.body.columns[0].rounds).toHaveLength(1);
+    expect(res.body.columns[0].rounds).toHaveLength(2); // tea dust, this week and the last
   });
 
   it("shows Ops every shop's name in a round (story 131)", async () => {
@@ -74,6 +76,8 @@ describe('The Ops rounds board and money overview', () => {
 
   it('passes every money check after the full flow (story 130)', async () => {
     const nadia = await app.as('nadia');
+    // The history week's suppliers were paid a week earlier.
+    const paidBefore = (await nadia.get('/api/ops/money')).body.supplierPayoutsSen as number;
     const cmOrder = (await supplierOrderOf(cmRound)).id;
     await nadia.post(`/api/approvals/${await opsApprovalOf(cmOrder)}/approve`, {});
     const farid = await app.as('farid');
@@ -90,12 +94,12 @@ describe('The Ops rounds board and money overview', () => {
     expect(res.status).toBe(200);
     expect(res.body.checks).toHaveLength(8);
     expect(res.body.checks.every((c: Check) => c.passed)).toBe(true);
-    expect(res.body.supplierPayoutsSen).toBe(1533000);
+    expect(res.body.supplierPayoutsSen).toBe(paidBefore + 1533000);
     const paidIn = await app.prisma.ledgerPosting.aggregate({
       where: { kind: { in: ['payment_in', 'delivery_fee_in'] } },
       _sum: { amountSen: true },
     });
-    expect(res.body.partnerCashSen).toBe(-(paidIn._sum.amountSen ?? 0) + 1533000);
+    expect(res.body.partnerCashSen).toBe(-(paidIn._sum.amountSen ?? 0) + paidBefore + 1533000);
   });
 
   it('shows a failing check with a link to the round', async () => {
@@ -132,7 +136,7 @@ describe('The Ops rounds board and money overview', () => {
     });
     expect(rej.status).toBe(200);
     const b = (await nadia.get('/api/ops/rounds')).body;
-    expect(b.stats.successRate).toBeCloseTo(9 / 11, 5);
+    expect(b.stats.successRate).toBeCloseTo(16 / 19, 5);
   });
 
   it('keeps another round failing check out of this round detail', async () => {

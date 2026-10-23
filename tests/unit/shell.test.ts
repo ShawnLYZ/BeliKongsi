@@ -89,8 +89,45 @@ describe('apiFetch', () => {
     );
     const error = await apiFetch('/api/demo/reset', { method: 'POST' }).catch((e) => e);
     expect(error).toBeInstanceOf(ApiError);
-    expect(error).toMatchObject({ code: 'DEMO_OFF', status: 404, message: 'Demo mode is off.' });
-    expect(notify).toHaveBeenCalledWith('Demo mode is off.');
+    expect(error).toMatchObject({
+      code: 'DEMO_OFF',
+      status: 404,
+      message: 'Demo mode is off. Refresh the page to see the latest.',
+    });
+    expect(notify).toHaveBeenCalledWith('Demo mode is off. Refresh the page to see the latest.');
+  });
+
+  it('adds what to do next to an error that only says what happened', async () => {
+    const { apiFetch } = setup(async () =>
+      Response.json(
+        { code: 'BASKET_CLOSED', message: 'This basket can no longer be approved.' },
+        { status: 409 },
+      ),
+    );
+    await expect(apiFetch('/api/baskets/b1/approve', { method: 'POST' })).rejects.toMatchObject({
+      message: 'This basket can no longer be approved. Refresh the page to see the latest.',
+    });
+  });
+
+  it('keeps an error that already says what to do next as it is', async () => {
+    const { apiFetch } = setup(async () =>
+      Response.json(
+        { code: 'WRONG_CODE', message: 'That code does not match this pickup. Please check it.' },
+        { status: 422 },
+      ),
+    );
+    await expect(apiFetch('/api/pickups/p1/collect', { method: 'POST' })).rejects.toMatchObject({
+      message: 'That code does not match this pickup. Please check it.',
+    });
+  });
+
+  it('asks to try again when the server fails', async () => {
+    const { apiFetch } = setup(async () =>
+      Response.json({ code: 'INTERNAL', message: 'Something went wrong.' }, { status: 500 }),
+    );
+    await expect(apiFetch('/api/session')).rejects.toMatchObject({
+      message: 'Something went wrong. Please try again.',
+    });
   });
 
   it('says what to do when the server cannot be reached', async () => {

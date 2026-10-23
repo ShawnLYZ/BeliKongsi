@@ -44,17 +44,21 @@ describe('demo state and reset', () => {
     expect(await app.prisma.shop.count()).toBe(43);
     expect((await verifyLogChain(app.prisma)).valid).toBe(true);
     const entries = await app.prisma.activityLogEntry.findMany({ orderBy: { seq: 'asc' } });
-    // Seeding the week writes one set of entries: 12 rounds opened, 81 background joins and two
-    // paid baskets (83 payments, 89 participations), so the second reset ran on top of the first.
+    // Seeding writes one set of entries, so the second reset ran on top of the first. The history
+    // week: 12 rounds opened (8 weekly, 4 fortnightly), 62 background joins and two paid baskets
+    // of 3 lines (64 payments, 68 participations), and 8 weekly rounds opened at its cut-off. The
+    // demo week: 81 background joins and two paid baskets (83 payments, 89 participations).
     const count = (action: string) => entries.filter((e) => e.action === action).length;
     expect(count('demo.reset')).toBe(1);
-    expect(count('round.opened')).toBe(12);
-    expect(count('payment.created')).toBe(83);
-    expect(count('payment.succeeded')).toBe(83);
-    expect(count('participation.joined')).toBe(89);
-    expect(count('basket.drafted')).toBe(2);
-    expect(count('basket.approved')).toBe(2);
-    expect(entries).toHaveLength(272);
+    expect(count('round.opened')).toBe(12 + 8);
+    expect(count('round.closed')).toBe(8);
+    expect(count('round.completed')).toBe(7);
+    expect(count('payment.created')).toBe(64 + 83);
+    expect(count('payment.succeeded')).toBe(64 + 83);
+    expect(count('participation.joined')).toBe(68 + 89);
+    expect(count('basket.drafted')).toBe(2 + 2);
+    expect(count('basket.approved')).toBe(2 + 2);
+    expect(entries).toHaveLength(849);
   });
 
   it('sets the demo clock to the most recent Monday 06:05', async () => {

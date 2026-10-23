@@ -5,7 +5,9 @@ import { ChevronLeft } from 'lucide-react';
 import type { PaymentView } from '@/lib/views/payments';
 import { CheckoutScreen } from '@/components/checkout/checkout-screen';
 import { PhoneColumn } from '@/components/common/phone-column';
+import { MadeUpDataBanner } from '@/components/shell/made-up-data-banner';
 import { resolveClock } from '@/server/adapters/clock';
+import { getDemoState } from '@/server/modules/demo/demo';
 import { getPaymentForCaller } from '@/server/modules/payments/views';
 import { personCaller } from '@/server/platform/caller';
 import { getDeps } from '@/server/platform/deps';
@@ -27,11 +29,12 @@ export default async function CheckoutPage({ params }: { params: Promise<{ payme
   try {
     payment = await getPaymentForCaller(deps, personCaller(session), paymentId);
   } catch (error) {
+    // An unknown payment, such as a link kept open across a demo reset: see not-found.tsx.
     if (error instanceof AppError && error.status === 404) notFound();
     throw error;
   }
   if (payment.status === 'succeeded') redirect(`/owner/receipts/${payment.paymentId}`);
-  const clock = await resolveClock(deps);
+  const [clock, demo] = await Promise.all([resolveClock(deps), getDemoState(deps)]);
   const back = payment.purpose === 'basket' ? '/owner/basket' : '/owner/rounds';
 
   return (
@@ -48,6 +51,7 @@ export default async function CheckoutPage({ params }: { params: Promise<{ payme
           <p className="text-xl font-bold tracking-tight">BeliKongsi</p>
         </PhoneColumn>
       </header>
+      {demo.demoMode ? <MadeUpDataBanner text={demo.bannerText} /> : null}
       <main id="main" className="flex-1 px-4 py-5">
         <PhoneColumn>
           <CheckoutScreen payment={payment} serverNow={clock.now().toISOString()} />

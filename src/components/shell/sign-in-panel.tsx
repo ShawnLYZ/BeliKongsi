@@ -58,7 +58,7 @@ export function SignInPanel({ accounts }: { accounts: AccountLike[] }) {
               )}
             >
               <span>{p.label}</span>
-              <span className="bg-muted text-muted-foreground rounded-full px-2.5 py-0.5 text-sm font-semibold">
+              <span className="bg-muted text-muted-foreground rounded-full px-2.5 py-0.5 text-base font-semibold">
                 Simulated
               </span>
             </button>

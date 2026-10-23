@@ -1,4 +1,5 @@
 import type { ParticipationStatus } from '@/generated/prisma/client';
+import type { DeliveryResultView, SavingsView } from '@/lib/views/savings';
 
 /** One of a shop's Kongsi lines, as its owner sees it in My Kongsi. All amounts are in sen. */
 export interface ParticipationView {
@@ -24,6 +25,10 @@ export interface ParticipationView {
   /** Everything refunded to the shop's balance for this line. */
   refundSen: number;
   outcomeReason: string | null;
+  /** What the delivery check found; null until the line is checked. */
+  deliveryResult: DeliveryResultView | null;
+  /** Null before the cut-off and for refunded lines. */
+  savings: SavingsView | null;
 }
 
 export function participationView(
@@ -45,6 +50,7 @@ export function participationView(
   },
   imageUrl: string | null,
   refundSen: number,
+  extra: Pick<ParticipationView, 'deliveryResult' | 'savings'>,
 ): ParticipationView {
   const { round } = p;
   return {
@@ -65,5 +71,6 @@ export function participationView(
     paidSen: p.paidSen,
     refundSen,
     outcomeReason: p.outcomeReason,
+    ...extra,
   };
 }

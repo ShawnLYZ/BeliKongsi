@@ -48,12 +48,20 @@ const joinAndPay = async (client: Client, roundId: string, body: object) => {
   if (paid.status !== 200) throw new Error(`payment failed: ${paid.status}`);
   return res.body as { paymentId: string };
 };
+/** What a line got back: its postings other than paying in (a background shop's join may also
+ * spend the refunds the history week left on its balance). */
 const postingsOf = (participationId: string) =>
-  app.prisma.ledgerPosting.findMany({ where: { participationId, kind: { not: 'payment_in' } } });
+  app.prisma.ledgerPosting.findMany({
+    where: { participationId, kind: { notIn: ['payment_in', 'balance_applied'] } },
+  });
+/** Events since the anchor, Monday 06:05 (the history week's close emitted its own). */
 const eventsOf = async (type: string) =>
-  (await app.prisma.integrationEvent.findMany({ where: { type }, orderBy: { seq: 'asc' } })).map(
-    (e) => e.data as Record<string, unknown>,
-  );
+  (
+    await app.prisma.integrationEvent.findMany({
+      where: { type, occurredAt: { gte: new Date('2026-11-01T22:05:00Z') } },
+      orderBy: { seq: 'asc' },
+    })
+  ).map((e) => e.data as Record<string, unknown>);
 
 afterEach(async () => {
   await app.close();
@@ -219,7 +227,9 @@ describe('closing the demo week', () => {
     expect((await app.prisma.round.findUniqueOrThrow({ where: { id: cmRound } })).status).toBe(
       'open',
     );
-    expect(await app.prisma.round.count({ where: { status: { not: 'open' } } })).toBe(11);
+    expect(
+      await app.prisma.round.count({ where: { cycleLabel: WEEK, status: { not: 'open' } } }),
+    ).toBe(11);
     expect((await runMoneyChecks(app.prisma)).allPassed).toBe(true);
   });
 

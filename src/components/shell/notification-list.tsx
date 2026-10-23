@@ -73,16 +73,16 @@ export function NotificationList({
                   {unread ? <span className="sr-only">Unread: </span> : null}
                   {n.title}
                 </h2>
-                <time dateTime={n.createdAt} className="text-muted-foreground text-sm">
+                <time dateTime={n.createdAt} className="text-muted-foreground text-base">
                   {formatMyt(new Date(n.createdAt))}
                 </time>
               </div>
-              <p className="mt-1 text-base">{n.body}</p>
+              <p className="mt-1 text-base tabular-nums">{n.body}</p>
               <figure className="bg-muted mt-3 rounded-xl p-3">
-                <figcaption className="text-muted-foreground text-sm font-semibold">
+                <figcaption className="text-muted-foreground text-base font-semibold">
                   WhatsApp preview
                 </figcaption>
-                <p className="mt-1 text-base whitespace-pre-line">{n.whatsappText}</p>
+                <p className="mt-1 text-base whitespace-pre-line tabular-nums">{n.whatsappText}</p>
               </figure>
               <div className="mt-3 flex flex-wrap gap-2">
                 <a

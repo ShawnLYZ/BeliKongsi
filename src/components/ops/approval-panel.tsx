@@ -99,7 +99,7 @@ export function ApprovalPanel({
     >
       <div>
         <p className="text-muted-foreground text-base font-semibold">Supplier order</p>
-        <h2 id={`${reasonId}-title`} className="text-xl font-bold">
+        <h2 id={`${reasonId}-title`} className="text-xl font-bold tabular-nums">
           {item.summary}
         </h2>
       </div>

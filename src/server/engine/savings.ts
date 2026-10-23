@@ -34,3 +34,16 @@ export function participationSavings(input: SavingsInput): SavingsResult {
     basis: input.baselineKind === 'usual' ? 'usual_price' : 'buy_alone',
   };
 }
+
+/**
+ * PRD §27: the saving as a percentage of what the same units cost at the usual price, to one
+ * decimal. Null when there is no usual cost to compare with.
+ */
+export function percentSaved(
+  lines: { baselineSen: Sen; units: number; savingSen: Sen }[],
+): number | null {
+  const usualCostSen = lines.reduce((sum, l) => sum + l.baselineSen * l.units, 0);
+  if (usualCostSen <= 0) return null;
+  const savedSen = lines.reduce((sum, l) => sum + l.savingSen, 0);
+  return Math.round((savedSen / usualCostSen) * 1000) / 10;
+}

@@ -19,7 +19,7 @@ export function RoleBadge({ role, className }: { role: Role; className?: string 
   return (
     <span
       className={cn(
-        'bg-accent text-accent-foreground inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-sm font-semibold',
+        'bg-accent text-accent-foreground inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-base font-semibold',
         className,
       )}
     >
@@ -94,7 +94,7 @@ export function AccountSwitcher({
       >
         <span className="flex min-w-0 flex-col leading-tight">
           <span className="truncate text-base font-semibold">{active.orgName}</span>
-          <span className="truncate text-sm opacity-90">{displayName}</span>
+          <span className="truncate text-base opacity-90">{displayName}</span>
         </span>
         <RoleBadge role={active.role} className="ml-auto" />
         <ChevronDown aria-hidden className="size-5 shrink-0" />
@@ -126,7 +126,7 @@ export function AccountSwitcher({
 
           <div className="overflow-y-auto px-2 py-3">
             <section aria-labelledby="switcher-yours" className="px-2">
-              <h3 id="switcher-yours" className="text-muted-foreground text-sm font-semibold">
+              <h3 id="switcher-yours" className="text-muted-foreground text-base font-semibold">
                 {displayName}&apos;s businesses
               </h3>
               <ul className="mt-1 flex flex-col gap-1">
@@ -157,7 +157,7 @@ export function AccountSwitcher({
 
             {groups.length > 0 ? (
               <section aria-labelledby="switcher-demo" className="mt-4 px-2">
-                <h3 id="switcher-demo" className="text-muted-foreground text-sm font-semibold">
+                <h3 id="switcher-demo" className="text-muted-foreground text-base font-semibold">
                   Every seeded account (demo)
                 </h3>
                 {groups.map((g) => (

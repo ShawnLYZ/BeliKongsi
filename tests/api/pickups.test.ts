@@ -328,6 +328,8 @@ describe('Door delivery handover', () => {
     });
     expectNoMoneyFields(before.body);
 
+    // The history week's door delivery was announced a week earlier.
+    const announced = await countWhatsapp('siti', 'pickup.delivered');
     const res = await kumar.post(`/api/pickups/${p.id}/collect`, { code: p.code });
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ status: 'delivered', statusLabel: 'Delivered' });
@@ -338,7 +340,7 @@ describe('Door delivery handover', () => {
     const text = 'Your goods were delivered. Please check them now.';
     expect(await lastWhatsapp('siti', 'pickup.delivered')).toBe(text);
     expect(await lastWhatsapp('kumar', 'pickup.delivered')).toBe(text);
-    expect(await countWhatsapp('siti', 'pickup.delivered')).toBe(1);
+    expect(await countWhatsapp('siti', 'pickup.delivered')).toBe(announced + 1);
   });
 });
 

@@ -251,7 +251,8 @@ describe('basket lifecycle, edge cases', () => {
     expect(await app.prisma.ledgerPosting.count()).toBe(postings);
   });
 
-  // Gerai's demo basket is already paid, so a second undecided basket is built by hand.
+  // Gerai's demo and history-week baskets are already paid, so an undecided basket for another
+  // week is built by hand.
   const extraBasket = async (week: string, deadlineAt: string, withApproval: boolean) => {
     const shopId = seedId('shop', 'GERAI');
     const base = {
@@ -287,7 +288,7 @@ describe('basket lifecycle, edge cases', () => {
   };
 
   it('keeps expiring the other baskets when one fails', async () => {
-    const other = await extraBasket('2026-W44', '2026-11-05T11:00:00Z', false);
+    const other = await extraBasket('2026-W43', '2026-11-05T11:00:00Z', false);
     const approved = await ah.post(`/api/baskets/${basketId}/approve`, undefined, {
       'idempotency-key': 'a',
     });
@@ -337,7 +338,7 @@ describe('basket lifecycle, edge cases', () => {
   });
 
   it('keeps reminding the other owners when one reminder fails', async () => {
-    await extraBasket('2026-W44', '2026-11-05T12:00:00Z', true);
+    await extraBasket('2026-W43', '2026-11-05T12:00:00Z', true);
     fail.notifyShop = seedId('shop', 'KEDAI_KOPI');
     app.clock.set('2026-11-05T10:00:00Z');
     const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);

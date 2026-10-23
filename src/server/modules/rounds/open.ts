@@ -1,5 +1,4 @@
 import type { Prisma, Round } from '@/generated/prisma/client';
-import { resolveClock } from '@/server/adapters/clock';
 import { appendLog } from '@/server/modules/activity/log';
 import { emitEvent } from '@/server/modules/integration/events';
 import { systemCaller } from '@/server/platform/caller';
@@ -61,18 +60,24 @@ export async function openNextRound(
   return round;
 }
 
-/** Opens a round at `now` for each active product that has none open. */
+/**
+ * Opens a round at `now` for each active product that has none open. Inside a caller's
+ * transaction (the seed) it reads and opens there, at that transaction's `now`.
+ */
 export async function openDueRounds(deps: AppDeps): Promise<{ opened: number }> {
-  const now = (await resolveClock(deps)).now();
-  const products = await deps.prisma.product.findMany({
-    where: { active: true, rounds: { none: { status: 'open' } } },
-    select: { id: true },
-    orderBy: { id: 'asc' },
-  });
+  const caller = systemCaller('open rounds');
+  const { now, products } = await withTransaction(deps, caller, async ({ tx, now }) => ({
+    now,
+    products: await tx.product.findMany({
+      where: { active: true, rounds: { none: { status: 'open' } } },
+      select: { id: true },
+      orderBy: { id: 'asc' },
+    }),
+  }));
   let opened = 0;
   for (const { id } of products) {
     // One transaction per round: its insert, log entry and event commit together.
-    await withTransaction(deps, systemCaller('open rounds'), async (ctx) => {
+    await withTransaction(deps, caller, async (ctx) => {
       await openNextRound(ctx, id, now);
     });
     opened += 1;

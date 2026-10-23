@@ -7,6 +7,7 @@ import type { UsualListItemView, UsualListView } from '@/lib/views/usual-list';
 import { CatalogueSearch } from '@/components/catalogue/catalogue-search';
 import { ApiError, apiFetch } from '@/components/common/api-client';
 import { BUTTON_PRIMARY, BUTTON_SECONDARY, FIELD_ERROR } from '@/components/common/controls';
+import { EmptyState } from '@/components/common/empty-state';
 import { parseRinggitInput, senToRinggitInput } from '@/lib/money-input';
 import { UsualListRow, type EditItem, type RowErrors } from './usual-list-row';
 
@@ -100,9 +101,11 @@ export function UsualListEditor({ shopId, list }: { shopId: string; list: UsualL
   return (
     <div className="flex flex-col gap-4">
       {items.length === 0 ? (
-        <p className="bg-card rounded-2xl border border-dashed p-4 text-base">
-          Your usual list is empty. Add the items you order every week.
-        </p>
+        <EmptyState
+          title="Your usual list is empty"
+          explanation="Add the items you order every week, with how many and what you usually pay. Your weekly basket is drafted from this list."
+          example="Evaporated milk 390 g, 2 cartons, usually RM 150.00 a carton."
+        />
       ) : (
         <ul aria-label="Your usual list" className="flex flex-col gap-3">
           {items.map((item) => (

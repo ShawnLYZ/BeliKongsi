@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { seedId } from '../../prisma/seed/ids';
 import { seedDemo } from '../../prisma/seed';
+import { PRODUCTS } from '../../prisma/seed/catalogue';
 import { verifyLogChain } from '@/server/modules/activity/log';
 import { runMoneyChecks } from '@/server/modules/ledger/checks';
 import { roundProgress } from '@/server/modules/rounds/read';
@@ -20,8 +21,16 @@ import {
 /** Fri 30 Oct 09:00 MYT and Sun 1 Nov 21:00 MYT: the first and the last background join. */
 const FIRST_JOIN = '2026-10-30T01:00:00.000Z';
 const LAST_JOIN = '2026-11-01T13:00:00.000Z';
-/** Thu 29 Oct 20:00 MYT. */
+/**
+ * Thu 29 Oct 20:00 MYT: the history week's cut-off opened the weekly rounds. The fortnightly ones
+ * have been open since Thu 22 Oct 20:00 MYT.
+ */
 const OPENED_AT = '2026-10-29T12:00:00.000Z';
+const FORTNIGHTLY_OPENED_AT = '2026-10-22T12:00:00.000Z';
+const FORTNIGHTLY = new Set(
+  PRODUCTS.filter((p) => p.cadence === 'fortnightly').map((p) => seedId('product', p.key)),
+);
+const WEEK = '2026-W45';
 /** Mon 2 Nov 06:00, 06:01 and 06:03 MYT. */
 const DRAFTED_AT = '2026-11-01T22:00:00.000Z';
 const GERAI_PAID_AT = '2026-11-01T22:01:00.000Z';
@@ -47,9 +56,11 @@ describe('the seeded demo week', () => {
     const rounds = await app.prisma.round.findMany({ where: { status: 'open' } });
     expect(rounds).toHaveLength(12);
     for (const r of rounds) {
-      expect(r.opensAt.toISOString()).toBe(OPENED_AT);
+      expect(r.opensAt.toISOString()).toBe(
+        FORTNIGHTLY.has(r.productId) ? FORTNIGHTLY_OPENED_AT : OPENED_AT,
+      );
       expect(r.cutoffAt.toISOString()).toBe('2026-11-05T12:00:00.000Z');
-      expect(r.cycleLabel).toBe('2026-W45');
+      expect(r.cycleLabel).toBe(WEEK);
     }
   });
 
@@ -73,7 +84,7 @@ describe('the seeded demo week', () => {
 
   it('gives each background shop two or three rounds, joined Friday to Sunday', async () => {
     const rows = await app.prisma.participation.findMany({
-      where: { shop: { isBackground: true } },
+      where: { shop: { isBackground: true }, round: { cycleLabel: WEEK } },
       orderBy: { joinedAt: 'asc' },
     });
     expect(rows).toHaveLength(81);
@@ -94,12 +105,17 @@ describe('the seeded demo week', () => {
     expect(bg01.map((r) => r.quantity)).toEqual([20, 30, 3]);
   });
 
-  it('charges each door background shop one delivery fee per date and pays every join by FPX', async () => {
+  it('charges each door background shop one delivery fee per date and pays every join, by FPX beyond the balance', async () => {
+    // This week's joins, from Friday 09:00 (the history week's were a week earlier).
     const payments = await app.prisma.payment.findMany({
-      where: { shop: { isBackground: true } },
+      where: { shop: { isBackground: true }, createdAt: { gte: new Date(FIRST_JOIN) } },
     });
     expect(payments).toHaveLength(81);
-    expect(payments.every((p) => p.status === 'succeeded' && p.method === 'fpx')).toBe(true);
+    expect(payments.every((p) => p.status === 'succeeded')).toBe(true);
+    // The refunds the history week left on a shop's balance pay first; FPX pays the rest.
+    expect(payments.every((p) => p.method === (p.externalSen > 0 ? 'fpx' : 'balance_only'))).toBe(
+      true,
+    );
     const doorShops = ['BG05', 'BG10', 'BG15', 'BG20', 'BG25', 'BG30', 'BG35', 'BG40'];
     for (const key of doorShops) {
       expect(await feeChargeOf(key, '2026-11-10')).toMatchObject({ status: 'held' });

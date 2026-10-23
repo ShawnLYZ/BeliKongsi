@@ -81,7 +81,7 @@ describe('Planning at the hub check', () => {
       where: { round: { id: (await roundOf('CM', '2026-W45')).id }, destinationType: 'door' },
     });
     const c = await app.prisma.consignment.findFirstOrThrow({
-      where: { destinationKey: `door:${doorPart.shopId}` },
+      where: { destinationKey: `door:${doorPart.shopId}`, deliveryDate: DATE },
     });
     expect(c).toMatchObject({
       destinationType: 'door',
@@ -89,7 +89,11 @@ describe('Planning at the hub check', () => {
       status: 'planned',
     });
     const pickup = await app.prisma.pickup.findFirstOrThrow({
-      where: { shopId: doorPart.shopId, destinationKey: `door:${doorPart.shopId}` },
+      where: {
+        shopId: doorPart.shopId,
+        destinationKey: `door:${doorPart.shopId}`,
+        deliveryDate: DATE,
+      },
     });
     expect(pickup).toMatchObject({
       destinationType: 'door',
@@ -201,10 +205,10 @@ describe('Pickup readiness (C4)', () => {
     });
     const key = `door:${doorPart.shopId}`;
     const pickup = await app.prisma.pickup.findFirstOrThrow({
-      where: { shopId: doorPart.shopId, destinationKey: key },
+      where: { shopId: doorPart.shopId, destinationKey: key, deliveryDate: DATE },
     });
     await app.prisma.consignment.updateMany({
-      where: { destinationKey: key },
+      where: { destinationKey: key, deliveryDate: DATE },
       data: { status: 'arrived' },
     });
     await refresh([pickup.id]);
@@ -212,7 +216,7 @@ describe('Pickup readiness (C4)', () => {
       'waiting',
     );
     await app.prisma.consignment.updateMany({
-      where: { destinationKey: key },
+      where: { destinationKey: key, deliveryDate: DATE },
       data: { status: 'out_for_delivery' },
     });
     await refresh([pickup.id]);
@@ -286,8 +290,9 @@ describe('Shorted lines', () => {
     const a = await allocationOf('KEDAI_KOPI', 'CM');
     expect(a).toMatchObject({ allocated: 0, consignmentId: null, pickupId: null });
     expect((await participationOf('KEDAI_KOPI', 'CM')).status).toBe('shorted');
-    expect(await app.prisma.consignment.count()).toBe(0);
-    expect(await app.prisma.pickup.count()).toBe(0);
+    // None for the demo week's date: the history week's were planned a week earlier.
+    expect(await app.prisma.consignment.count({ where: { deliveryDate: DATE } })).toBe(0);
+    expect(await app.prisma.pickup.count({ where: { deliveryDate: DATE } })).toBe(0);
   });
 
   it("gives Gerai Contoh's delivery fee back when its only door line for the date is shorted", async () => {

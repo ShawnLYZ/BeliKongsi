@@ -54,7 +54,7 @@
 **Files:**
 
 - Create: `src/server/modules/savings/savings.ts`, `src/lib/views/savings.ts`, `src/app/api/shops/[shopId]/savings/route.ts`
-- Modify: `src/server/modules/payments/participations.ts`. `ParticipationView` gains `deliveryResult: { received: number; missing: number; damaged: number } | null` and `savings: { savingSen: number; unitSavingSen: number; status: 'estimated' | 'verified'; basis: 'usual_price' | 'buy_alone' } | null`.
+- Modify: `src/server/modules/payments/participations.ts` and `src/lib/views/participations.ts` (where `ParticipationView` is defined). `ParticipationView` gains `deliveryResult: { received: number; missing: number; damaged: number } | null` and `savings: { savingSen: number; unitSavingSen: number; status: 'estimated' | 'verified'; basis: 'usual_price' | 'buy_alone' } | null`.
 - Test: `tests/api/savings.test.ts`
 
 **Interfaces:**
@@ -67,7 +67,7 @@
     - `feesPaidSen` = Σ allocated × `finalFeeSen` for allocations whose round reached the hub in the month.
     - `verifiedSavingsSen` follows PRD §6.10.
     - `percentSaved` counts only usual-price baselines; it is `null` when there are none.
-  - `homeSummary(deps, caller, shopId): Promise<{ basket: OwnerBasketCard | null; nextPickup: PickupView | null; savingsThisMonth: { verifiedSen: number; estimatedSen: number }; balanceSen: number; pendingApprovals: number }>`.
+  - `homeSummary(deps, caller, shopId): Promise<{ basket: OwnerBasketView | null; nextPickup: PickupView | null; savingsThisMonth: { verifiedSen: number; estimatedSen: number }; balanceSen: number; pendingApprovals: number }>`.
   - `GET /api/shops/{shopId}/savings?month=YYYY-MM` (owner).
 
 - [ ] **Step 1: Write the failing tests** (full demo flow to the approved claim, from M8's lifecycle helpers):
@@ -119,7 +119,7 @@ it('shows zero verified savings, not blanks, when nothing is checked yet', async
 
 **Interfaces:**
 
-- Produces: `seedHistoryWeek(deps: AppDeps, clock: MutableClock, anchorMonday: Date): Promise<void>`. The index §5.1 time line, relative to the anchor:
+- Produces: `seedHistoryWeek(ctx: TxContext, anchorMonday: Date): Promise<void>` (same shape as `seedCurrentWeek`: runs inside the seed transaction and moves time with `setTransactionNow`). The index §5.1 time line, relative to the anchor:
   - **Thu 22 Oct 20:00:** `openDueRounds` (week-44 weekly rounds, and week-45 packaging rounds).
   - **Fri 23 Oct 09:00 onwards:** background joins on weekly products only, using the index §5.7 weekly quantity lists and the same assignment rule, 45 minutes apart.
   - **Mon 26 Oct 06:00:** draft baskets. Gerai's covers `CM` 4, `EM` 2 and `FLOUR` 2; Kafe's covers `CM` 3, `EGG_B` 10 and `COFFEE` 2. Gerai pays at 06:01, Kafe at 06:03.

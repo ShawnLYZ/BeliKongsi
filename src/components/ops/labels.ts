@@ -50,4 +50,4 @@ export const TH_NUM = 'px-4 py-3 text-right font-semibold whitespace-nowrap';
 export const TD = 'px-4 py-3 align-top';
 export const TD_NUM = 'px-4 py-3 text-right align-top whitespace-nowrap tabular-nums';
 export const LINK =
-  'text-primary font-semibold underline underline-offset-4 outline-none hover:no-underline focus-visible:ring-3 focus-visible:ring-ring/60 rounded-sm';
+  'text-primary inline-flex min-h-11 items-center font-semibold underline underline-offset-4 outline-none hover:no-underline focus-visible:ring-3 focus-visible:ring-ring/60 rounded-sm';

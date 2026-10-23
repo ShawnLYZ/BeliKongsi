@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import type { OrgType, PrismaClient, Role } from '@/generated/prisma/client';
+import type { OrgType, Prisma, Role } from '@/generated/prisma/client';
 import { systemClock } from '@/server/adapters/clock';
 import type { AppDeps } from './deps';
 
@@ -81,13 +81,16 @@ export function readCookie(header: string | null, name: string): string | null {
   return null;
 }
 
-/** Builds the session for one active membership of one user; null if either is gone or ended. */
+/**
+ * Builds the session for one active membership of one user; null if either is gone or ended. Reads
+ * through a transaction client too (the seed acts as its people inside its transaction).
+ */
 export async function sessionForMembership(
-  prisma: PrismaClient,
+  db: Pick<Prisma.TransactionClient, 'membership'>,
   membershipId: string,
   userId?: string,
 ): Promise<Session | null> {
-  const m = await prisma.membership.findFirst({
+  const m = await db.membership.findFirst({
     where: { id: membershipId, endedAt: null, ...(userId ? { userId } : {}) },
     include: { user: true, shop: true, supplier: true, operator: true },
   });

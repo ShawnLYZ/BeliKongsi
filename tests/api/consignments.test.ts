@@ -82,8 +82,10 @@ describe('Partner status moves', () => {
       where: { action: 'fulfilment.consignment_status_changed', subjectId: c.id },
     });
     expect(log).toMatchObject({ actorType: 'person', subjectType: 'consignment' });
+    // The newest one: the history week's consignments moved before this one.
     const event = await app.prisma.integrationEvent.findFirstOrThrow({
       where: { type: 'consignment.status_changed' },
+      orderBy: { seq: 'desc' },
     });
     expect(event.data).toEqual({
       consignmentId: c.id,
@@ -129,7 +131,8 @@ describe('Delivery fee handover (PRD §8)', () => {
 
   it("hands Gerai Contoh's delivery fee to the partner once at dispatch (PRD §8)", async () => {
     const geraiDoor = await consignmentFor(GERAI_DOOR);
-    expect(await feeChargeOf('GERAI', DATE)).toMatchObject({ status: 'held', amountSen: 1200 });
+    const charge = await feeChargeOf('GERAI', DATE);
+    expect(charge).toMatchObject({ status: 'held', amountSen: 1200 });
     const logisticsBefore = await balanceOf(app.prisma, { kind: 'logistics_payable' });
     await moveConsignment(app, geraiDoor.id, 'dispatched');
     expect(await feeChargeOf('GERAI', DATE)).toMatchObject({ status: 'passed_to_partner' });
@@ -137,8 +140,9 @@ describe('Delivery fee handover (PRD §8)', () => {
     expect(
       await balanceOf(app.prisma, { kind: 'delivery_fee_hold', shopId: GERAI, deliveryDate: DATE }),
     ).toBe(0);
+    // This date's fee only: the history week's fees went to the partner a week earlier.
     const posting = await app.prisma.ledgerPosting.findMany({
-      where: { kind: 'delivery_fee_to_partner' },
+      where: { kind: 'delivery_fee_to_partner', paymentId: charge!.paymentId },
     });
     expect(posting).toHaveLength(1);
     expect(Number(posting[0]!.amountSen)).toBe(1200);
@@ -153,8 +157,11 @@ describe('Delivery fee handover (PRD §8)', () => {
     const logisticsAfterFirst = await balanceOf(app.prisma, { kind: 'logistics_payable' });
     await moveConsignment(app, wave2.id, 'dispatched');
     expect(await balanceOf(app.prisma, { kind: 'logistics_payable' })).toBe(logisticsAfterFirst);
+    const charge = await feeChargeOf('GERAI', DATE);
     expect(
-      await app.prisma.ledgerPosting.count({ where: { kind: 'delivery_fee_to_partner' } }),
+      await app.prisma.ledgerPosting.count({
+        where: { kind: 'delivery_fee_to_partner', paymentId: charge!.paymentId },
+      }),
     ).toBe(1);
   });
 

@@ -127,7 +127,10 @@ describe('Delivery check', () => {
     const stored = await app.prisma.photo.findUniqueOrThrow({ where: { id: photo } });
     expect(stored.deliveryCheckLineId).toBe(line.id);
     const logs = await app.prisma.activityLogEntry.findMany({
-      where: { action: { in: ['check.delivery_check_submitted', 'claim.submitted'] } },
+      where: {
+        action: { in: ['check.delivery_check_submitted', 'claim.submitted'] },
+        subjectId: { in: [checkId, claimId] },
+      },
     });
     expect(logs.map((l) => l.action).sort()).toEqual([
       'check.delivery_check_submitted',
@@ -184,7 +187,7 @@ describe('Delivery check', () => {
       status: 422,
       body: { code: 'MORE_THAN_ALLOCATED', details: { allocationId: cmAlloc } },
     });
-    expect(await app.prisma.deliveryCheck.count()).toBe(0);
+    expect(await app.prisma.deliveryCheck.count({ where: { pickupId: p.id } })).toBe(0);
   });
 
   it("refuses another pickup's photo", async () => {
@@ -267,7 +270,11 @@ describe('Delivery check', () => {
       select: { id: true },
     });
     const bg = await app.prisma.pickup.findFirstOrThrow({
-      where: { shopId: { in: shops.map((x) => x.id) }, destinationType: 'pickup_point' },
+      where: {
+        shopId: { in: shops.map((x) => x.id) },
+        destinationType: 'pickup_point',
+        deliveryDate: DATE,
+      },
       orderBy: { id: 'asc' },
     });
     await app.prisma.pickup.update({ where: { id: bg.id }, data: { status: 'ready' } });

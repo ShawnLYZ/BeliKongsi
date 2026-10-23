@@ -68,7 +68,7 @@
   --muted-foreground: #57534e;
   --accent: #f5a623;
   --accent-foreground: #1c1917;
-  --destructive: oklch(0.577 0.245 27.325);
+  --destructive: oklch(0.505 0.213 27.518); /* red-700: AA on the cream and muted backgrounds */
   --border: #e6dcc0;
   --input: #8a7f66;
   --ring: #0f766e;

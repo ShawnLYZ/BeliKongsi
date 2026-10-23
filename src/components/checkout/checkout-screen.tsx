@@ -22,7 +22,7 @@ type Method = 'duitnow_qr' | 'fpx';
 type Outcome = 'succeeded' | 'failed';
 
 const TAB =
-  'min-h-12 flex-1 rounded-lg px-3 text-base font-semibold data-active:bg-card data-active:text-foreground data-active:shadow-sm';
+  'text-foreground min-h-12 flex-1 rounded-lg px-3 text-base font-semibold data-active:bg-card data-active:shadow-sm';
 const BANK =
   'has-focus-visible:ring-ring/60 flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border-2 px-3 has-focus-visible:ring-3';
 

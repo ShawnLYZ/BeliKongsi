@@ -10,14 +10,12 @@ import { DemoMenu } from './demo-menu';
 const ICON_LINK =
   'relative inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-lg px-2 text-base font-medium hover:bg-white/10 focus-visible:ring-3 focus-visible:ring-white focus-visible:outline-none';
 
-function CountBadge({ count }: { count: number }) {
+function CountBadge({ count, word }: { count: number; word: string }) {
   if (count <= 0) return null;
   return (
-    <span
-      aria-hidden
-      className="bg-accent text-accent-foreground absolute top-0.5 right-0.5 min-w-5 rounded-full px-1 text-center text-xs leading-5 font-bold tabular-nums"
-    >
+    <span className="bg-accent text-accent-foreground absolute top-0.5 right-0.5 min-w-5 rounded-full px-1 text-center text-xs leading-5 font-bold tabular-nums">
       {count > 99 ? '99+' : count}
+      <span className="sr-only"> {word}</span>
     </span>
   );
 }
@@ -35,14 +33,12 @@ function ShellLink({
   count?: number;
   countWord?: string;
 }) {
-  const accessible = count && count > 0 ? `${label}, ${count} ${countWord}` : label;
+  // The name is the visible text (label, then count), so it matches what sighted users see.
   return (
-    <Link href={href} aria-label={accessible} title={label} className={ICON_LINK}>
+    <Link href={href} title={label} className={ICON_LINK}>
       {icon}
-      <span aria-hidden className="hidden lg:inline">
-        {label}
-      </span>
-      {count !== undefined ? <CountBadge count={count} /> : null}
+      <span className="sr-only lg:not-sr-only">{label}</span>
+      {count !== undefined ? <CountBadge count={count} word={countWord} /> : null}
     </Link>
   );
 }

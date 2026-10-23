@@ -65,19 +65,28 @@ export function BasketLine({
             <dd className="text-right font-semibold">
               <Money sen={line.startingLineSen} />
             </dd>
-            <dt>Estimated after cut-off</dt>
+            <dt>{line.closed ? 'Final price' : 'Estimated after cut-off'}</dt>
             <dd className="text-right">
               {line.projectedAllInSen !== null ? (
                 <>
                   <Money sen={line.projectedAllInSen} /> a {line.unitName}
                 </>
+              ) : line.closed ? (
+                'Dropped: full refund'
               ) : (
                 'Below the minimum order'
               )}
             </dd>
-            <dt>Estimated savings</dt>
+            <dt>{line.savingsStatus === 'verified' ? 'Verified savings' : 'Estimated savings'}</dt>
             <dd className="text-primary text-right font-semibold">
-              {line.estimatedSavingsSen !== null ? <Money sen={line.estimatedSavingsSen} /> : '—'}
+              {line.estimatedSavingsSen !== null ? (
+                <Money
+                  sen={line.estimatedSavingsSen}
+                  className={line.estimatedSavingsSen < 0 ? 'text-destructive' : undefined}
+                />
+              ) : (
+                '—'
+              )}
             </dd>
           </dl>
           <p className="text-muted-foreground text-base">
@@ -97,11 +106,13 @@ export function BasketLine({
             ) : null}
           </p>
           {line.notice ? <p className="text-base">{line.notice}</p> : null}
-          <WhyThisPriceSheet
-            productName={line.name}
-            explanation={line.explanation}
-            deliveryFeeNote={deliveryFeeNote}
-          />
+          {line.closed ? null : (
+            <WhyThisPriceSheet
+              productName={line.name}
+              explanation={line.explanation}
+              deliveryFeeNote={deliveryFeeNote}
+            />
+          )}
         </>
       )}
     </article>

@@ -144,9 +144,17 @@ describe('The supplier portal', () => {
     ).toBe(true);
   });
 
-  it('lists no payouts before a hub check', async () => {
+  it('lists no payouts for this week’s orders before their hub check', async () => {
     const res = await (await app.as('farid')).get(`/api/suppliers/${SUP_DRY}/payouts`);
     expect(res.status).toBe(200);
-    expect(res.body.items).toEqual([]);
+    const thisWeek = await app.prisma.supplierOrder.findMany({
+      where: { supplierId: SUP_DRY, round: { cycleLabel: WEEK } },
+      select: { id: true },
+    });
+    expect(thisWeek.length).toBeGreaterThan(0);
+    const paid = res.body.items.map((i: { supplierOrderId: string }) => i.supplierOrderId);
+    expect(paid.filter((id: string) => thisWeek.some((o) => o.id === id))).toEqual([]);
+    // The history week's condensed milk, evaporated milk, oil, flour and coffee were paid.
+    expect(paid).toHaveLength(5);
   });
 });

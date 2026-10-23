@@ -1,5 +1,10 @@
 import type { BasketLine, Role, WeeklyBasket } from '@/generated/prisma/client';
-import type { OwnerBasketLine, OwnerBasketView, StaffBasketView } from '@/lib/views/baskets';
+import type {
+  BasketSettledView,
+  OwnerBasketLine,
+  OwnerBasketView,
+  StaffBasketView,
+} from '@/lib/views/baskets';
 import { addIsoWeeks, isoWeekOf, isoWeekStart } from '@/lib/time';
 import { participationSavings } from '@/server/engine';
 import { appendLog } from '@/server/modules/activity/log';
@@ -15,6 +20,11 @@ import { badRequest, forbidden, notFound, unprocessable } from '@/server/platfor
 import { UUID } from '@/server/platform/ids';
 import { requireShopAccess } from '@/server/platform/permissions';
 import { withTransaction, type TxContext } from '@/server/platform/tx';
+import {
+  participationSavingsView,
+  REFUNDED,
+  withAllocationAndCheck,
+} from '@/server/modules/savings/savings';
 import { basketTotals } from './amounts';
 
 const DAY = 86_400_000;
@@ -126,6 +136,49 @@ async function staffView(ctx: TxContext, basket: WeeklyBasket): Promise<StaffBas
   };
 }
 
+/** A basket line's participation with its allocation and delivery check, once its round closed. */
+type ClosedPart = Awaited<ReturnType<typeof closedParticipations>>[number];
+
+async function closedParticipations(tx: TxContext['tx'], lineIds: string[]) {
+  const parts = await tx.participation.findMany({ where: { basketLineId: { in: lineIds } } });
+  return withAllocationAndCheck(tx, parts);
+}
+
+/**
+ * Once a paid basket's rounds have all closed, the open-round totals are zero, so the home card
+ * shows what was paid, what it came to at the final price and what went back to the balance.
+ * Lines refunded before any goods came count as paid and refunded, never as kept, and savings come
+ * from the Savings page's own function so the two screens always agree.
+ */
+export function settledSummary(
+  basket: WeeklyBasket,
+  parts: ClosedPart[],
+): BasketSettledView | null {
+  if (basket.status !== 'paid') return null;
+  if (parts.length === 0 || parts.some((p) => p.status === 'active')) return null;
+  const kept = parts.filter((p) => p.finalAllInSen !== null && !REFUNDED.includes(p.status));
+  const paidSen = parts.reduce((sum, p) => sum + p.paidSen, 0);
+  // Priced on the units the hub allocated (a shortfall was refunded on the rest), so paid minus
+  // final stays the price difference plus every refund posted to the balance.
+  const finalSen = kept.reduce(
+    (sum, p) => sum + p.finalAllInSen! * (p.allocation?.allocated ?? p.quantity),
+    0,
+  );
+  const savings = kept.map((p) => participationSavingsView(p)!);
+  return {
+    paidSen,
+    finalSen,
+    refundedSen: paidSen - finalSen,
+    estimatedSavingsSen: savings.reduce((sum, v) => sum + v.savingSen, 0),
+    // Nothing kept means nothing was checked, so an empty list is never "verified".
+    savingsStatus:
+      savings.length > 0 && savings.every((v) => v.status === 'verified')
+        ? 'verified'
+        : 'estimated',
+    savingsHasBuyAloneBasis: savings.some((v) => v.basis === 'buy_alone'),
+  };
+}
+
 async function ownerView(ctx: TxContext, basket: WeeklyBasket): Promise<OwnerBasketView> {
   const { tx, deps, now } = ctx;
   const shop = await tx.shop.findUniqueOrThrow({
@@ -149,6 +202,14 @@ async function ownerView(ctx: TxContext, basket: WeeklyBasket): Promise<OwnerBas
       : basket.pickupPointId
         ? ({ type: 'pickup_point', pickupPointId: basket.pickupPointId } as const)
         : undefined;
+
+  const parts = await closedParticipations(
+    tx,
+    lines.map((l) => l.id),
+  );
+  const closedOf = new Map(
+    parts.filter((p) => p.status !== 'active').map((p) => [p.basketLineId, p]),
+  );
 
   const views: OwnerBasketLine[] = [];
   for (const l of [...lines].sort(
@@ -178,7 +239,25 @@ async function ownerView(ctx: TxContext, basket: WeeklyBasket): Promise<OwnerBas
       roundId: l.roundId,
       cutoffAt: round ? round.cutoffAt.toISOString() : null,
       savingsBasis: usual !== null ? ('usual_price' as const) : ('buy_alone' as const),
+      closed: false,
     };
+    const closedPart = l.removed ? undefined : closedOf.get(l.id);
+    if (closedPart) {
+      // The round has closed: show what it came to, not a projection against the closed round.
+      const final = closedPart.finalAllInSen;
+      const lineSavings = participationSavingsView(closedPart);
+      views.push({
+        ...base,
+        closed: true,
+        startingAllInSen: closedPart.startingAllInSen,
+        startingLineSen: closedPart.startingAllInSen * closedPart.quantity,
+        projectedAllInSen: final,
+        estimatedSavingsSen: lineSavings?.savingSen ?? null,
+        savingsStatus: lineSavings?.status ?? 'estimated',
+        explanation: [],
+      });
+      continue;
+    }
     if (!round || l.removed) {
       views.push({
         ...base,
@@ -186,6 +265,7 @@ async function ownerView(ctx: TxContext, basket: WeeklyBasket): Promise<OwnerBas
         startingLineSen: null,
         projectedAllInSen: null,
         estimatedSavingsSen: null,
+        savingsStatus: 'estimated' as const,
         explanation: [],
       });
       continue;
@@ -217,6 +297,7 @@ async function ownerView(ctx: TxContext, basket: WeeklyBasket): Promise<OwnerBas
       startingLineSen: q.startingLineSen,
       projectedAllInSen,
       estimatedSavingsSen: savings?.savingSen ?? null,
+      savingsStatus: 'estimated' as const,
       explanation: explainQuote(q, l.quantity, l.product.unitName),
     });
   }
@@ -236,6 +317,7 @@ async function ownerView(ctx: TxContext, basket: WeeklyBasket): Promise<OwnerBas
     basketId: basket.id,
     week: basket.basketWeek,
     status: basket.status,
+    settled: settledSummary(basket, parts),
     deadlineAt: basket.deadlineAt.toISOString(),
     fulfilment: basket.fulfilment,
     pickupPoint: point ? pointView(point, shop) : null,

@@ -10,7 +10,7 @@ import { BASKET_STATUS_TEXT } from './basket-screen';
 
 /** Owner home: this week's basket at a glance, with "Approve & pay" (PRD §22 "Home"). */
 export function BasketCard({ basket, serverNow }: { basket: OwnerBasketView; serverNow: string }) {
-  const { totals } = basket;
+  const { totals, settled } = basket;
   const items = basket.lines.filter((l) => !l.removed).length;
   const changes = basket.lines.filter((l) => staffChange(l) !== null).length;
   const open = basket.status === 'draft' || basket.status === 'payment_pending';
@@ -42,14 +42,45 @@ export function BasketCard({ basket, serverNow }: { basket: OwnerBasketView; ser
             </dd>
           </>
         ) : null}
-        <dt>Estimated after cut-off</dt>
-        <dd className="text-right">
-          about <Money sen={totals.estimatedAfterCutoffSen} />
-        </dd>
-        <dt>Estimated savings</dt>
-        <dd className="text-primary text-right font-semibold">
-          <Money sen={totals.estimatedSavingsSen} />
-        </dd>
+        {settled ? (
+          <>
+            <dt>Goods paid</dt>
+            <dd className="text-right">
+              <Money sen={settled.paidSen} />
+            </dd>
+            <dt>Final price</dt>
+            <dd className="text-right text-lg font-bold">
+              <Money sen={settled.finalSen} />
+            </dd>
+            <dt>Back in your balance</dt>
+            <dd className="text-right">
+              <Money sen={settled.refundedSen} />
+            </dd>
+            <dt>
+              {settled.savingsStatus === 'verified' ? 'Verified savings' : 'Estimated savings'}
+            </dt>
+            <dd className="text-primary text-right font-semibold">
+              <Money
+                sen={settled.estimatedSavingsSen}
+                className={settled.estimatedSavingsSen < 0 ? 'text-destructive' : undefined}
+              />
+            </dd>
+          </>
+        ) : (
+          <>
+            <dt>Estimated after cut-off</dt>
+            <dd className="text-right">
+              about <Money sen={totals.estimatedAfterCutoffSen} />
+            </dd>
+            <dt>Estimated savings</dt>
+            <dd className="text-primary text-right font-semibold">
+              <Money
+                sen={totals.estimatedSavingsSen}
+                className={totals.estimatedSavingsSen < 0 ? 'text-destructive' : undefined}
+              />
+            </dd>
+          </>
+        )}
       </dl>
       {open ? (
         <Countdown

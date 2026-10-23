@@ -5,23 +5,19 @@ import type { AppDeps } from '@/server/platform/deps';
 import { UUID } from '@/server/platform/ids';
 import { toPage } from '@/server/platform/pagination';
 import { requireShopAccess } from '@/server/platform/permissions';
+import { REFUND_KINDS } from '@/server/modules/ledger/refund-kinds';
 import { productImageUrl } from '@/server/modules/rounds/read';
+import {
+  deliveryResultView,
+  participationSavingsView,
+  withAllocationAndCheck,
+} from '@/server/modules/savings/savings';
 
 export type ParticipationFilter = {
   status: 'active' | 'history';
   cursor: string | null;
   limit: number;
 };
-
-/** The postings that give money back to the shop for one line (not the delivery fee, not claims). */
-const REFUND_KINDS = [
-  'refund_cancelled',
-  'refund_difference',
-  'refund_dropped',
-  'refund_failed',
-  'refund_round_cancelled',
-  'refund_shortfall',
-] as const;
 
 /** A cursor is the last row's cut-off and id; a malformed one starts from the top. */
 function parseCursor(cursor: string | null): { cutoffAt: Date; id: string } | null {
@@ -60,6 +56,7 @@ export async function listShopParticipations(
     take: filter.limit + 1,
   });
   const page = toPage(rows, filter.limit, (r) => `${r.round.cutoffAt.toISOString()}|${r.id}`);
+  const items = await withAllocationAndCheck(deps.prisma, page.items);
   const refunds = await deps.prisma.ledgerPosting.groupBy({
     by: ['participationId'],
     where: {
@@ -70,8 +67,11 @@ export async function listShopParticipations(
   });
   const refundOf = new Map(refunds.map((g) => [g.participationId, g._sum.amountSen ?? 0]));
   return {
-    items: page.items.map((r) =>
-      participationView(r, productImageUrl(deps, r.round.product), refundOf.get(r.id) ?? 0),
+    items: items.map((r) =>
+      participationView(r, productImageUrl(deps, r.round.product), refundOf.get(r.id) ?? 0, {
+        deliveryResult: deliveryResultView(r),
+        savings: participationSavingsView(r),
+      }),
     ),
     nextCursor: page.nextCursor,
   };

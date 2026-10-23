@@ -1,13 +1,24 @@
 import Link from 'next/link';
 import type { ParticipationView } from '@/lib/views/participations';
+import type { DeliveryResultView } from '@/lib/views/savings';
 import { BUTTON_QUIET } from '@/components/common/controls';
 import { Money } from '@/components/common/money';
+import { TimelineSheet } from '@/components/common/timeline-sheet';
+import { SavingsAmount } from '@/components/home/savings-label';
 import { CancelLineButton } from '@/components/rounds/cancel-line-button';
 import { CLOSING_TEXT, isClosing, statusWords } from '@/components/rounds/status-words';
 import { formatMyt, formatMytDate, formatUnits } from '@/lib/format';
 
 /** Statuses whose goods are still coming (or came): the ready date means something. */
 const GOODS_COMING = new Set(['active', 'kept', 'allocated', 'shorted', 'received']);
+
+/** "5 received, 1 damaged" from a delivery check; "All 6 received" when nothing was wrong. */
+function deliveryText({ received, missing, damaged }: DeliveryResultView): string {
+  if (missing === 0 && damaged === 0) return `All ${received} received`;
+  return [`${received} received`, missing && `${missing} missing`, damaged && `${damaged} damaged`]
+    .filter(Boolean)
+    .join(', ');
+}
 
 /**
  * One of the shop's Kongsi lines on "My Kongsi": its outcome sentence, what was paid, what came
@@ -44,6 +55,14 @@ export function ParticipationCard({ p, serverNow }: { p: ParticipationView; serv
         <dd className="text-right">
           <Money sen={p.paidSen} />
         </dd>
+        {p.finalAllInSen === null ? null : (
+          <>
+            <dt>Final price each</dt>
+            <dd className="text-right">
+              <Money sen={p.finalAllInSen} />
+            </dd>
+          </>
+        )}
         {active ? null : (
           <>
             <dt>Back in your balance</dt>
@@ -52,6 +71,20 @@ export function ParticipationCard({ p, serverNow }: { p: ParticipationView; serv
             </dd>
           </>
         )}
+        {p.deliveryResult ? (
+          <>
+            <dt>Delivery</dt>
+            <dd className="text-right">{deliveryText(p.deliveryResult)}</dd>
+          </>
+        ) : null}
+        {p.savings ? (
+          <>
+            <dt>Saved</dt>
+            <dd className="text-right">
+              <SavingsAmount {...p.savings} />
+            </dd>
+          </>
+        ) : null}
         {active ? (
           <>
             <dt>Cut-off</dt>
@@ -73,6 +106,12 @@ export function ParticipationCard({ p, serverNow }: { p: ParticipationView; serv
         <Link href={`/owner/rounds/${p.roundId}`} className={`${BUTTON_QUIET} -ml-2 px-2`}>
           See round<span className="sr-only"> for {p.productName}</span>
         </Link>
+        <TimelineSheet
+          subjectType="participation"
+          subjectId={p.participationId}
+          title={`Timeline: ${p.shortName}`}
+          className={BUTTON_QUIET}
+        />
         {active && !closing ? (
           <CancelLineButton
             participationId={p.participationId}

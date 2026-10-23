@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { claimRefund, participationSavings, unitAmounts } from '@/server/engine';
+import { claimRefund, participationSavings, percentSaved, unitAmounts } from '@/server/engine';
 
 const cmIpohFinal = unitAmounts(14600, 200, 293);
 
@@ -80,5 +80,29 @@ describe('participation savings', () => {
         verified: true,
       }).savingSen,
     ).toBe(-370);
+  });
+});
+
+describe('percent saved', () => {
+  it('compares the saving with the usual cost of the units, to one decimal', () => {
+    // 7075 saved on 82500 + 20000 of usual cost = 6.9024...% -> 6.9
+    expect(
+      percentSaved([
+        { baselineSen: 16500, units: 5, savingSen: 6575 },
+        { baselineSen: 10000, units: 2, savingSen: 500 },
+      ]),
+    ).toBe(6.9);
+  });
+
+  it('is negative when the final price is above the usual price', () => {
+    expect(percentSaved([{ baselineSen: 15000, units: 2, savingSen: -370 }])).toBe(-1.2);
+  });
+
+  it('is null when there is nothing to compare with', () => {
+    expect(percentSaved([])).toBeNull();
+  });
+
+  it('is null when every unit was lost to the check', () => {
+    expect(percentSaved([{ baselineSen: 15000, units: 0, savingSen: 0 }])).toBeNull();
   });
 });

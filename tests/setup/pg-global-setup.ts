@@ -19,8 +19,6 @@ const ADMIN_PASSWORD = 'postgres';
 const APP_CREDENTIALS = 'bk_app:bk_app_test';
 const root = resolve(import.meta.dirname, '../..');
 
-let cluster: Cluster | undefined;
-
 // embedded-postgres registers an async-exit-hook that calls process.exit(0) on 'beforeExit',
 // which would overwrite the exit code vitest sets for failing tests. Remember it and restore it.
 let savedExitCode: typeof process.exitCode;
@@ -120,18 +118,42 @@ async function dropLeftoverTestDatabases(adminUrl: (db?: string) => string): Pro
   });
 }
 
-export default async function setup(project: TestProject): Promise<() => Promise<void>> {
-  cluster = await startCluster({
+/**
+ * Projects sharing this setup (`api`, `api-serial`) share one cluster; the last teardown stops it.
+ * Vitest loads the file once per project, so the shared state lives on `globalThis`.
+ */
+interface SharedSetup {
+  users: number;
+  starting?: Promise<void>;
+  cluster?: Cluster;
+}
+const shared = ((globalThis as { __bkPgSetup?: SharedSetup }).__bkPgSetup ??= { users: 0 });
+
+async function startOnce(): Promise<void> {
+  const cluster = await startCluster({
     dir: resolve(root, '.data/pg-test'),
     port: PORT,
     password: ADMIN_PASSWORD,
   });
+  shared.cluster = cluster;
   try {
     await dropLeftoverTestDatabases(cluster.adminUrl);
     await ensureTemplate(cluster.adminUrl);
   } catch (error) {
     await cluster.stop();
-    cluster = undefined;
+    shared.cluster = undefined;
+    throw error;
+  }
+}
+
+export default async function setup(project: TestProject): Promise<() => Promise<void>> {
+  shared.users += 1;
+  shared.starting ??= startOnce();
+  try {
+    await shared.starting;
+  } catch (error) {
+    shared.users -= 1;
+    shared.starting = undefined;
     throw error;
   }
   const base = new URL(`postgresql://localhost:${PORT}`);
@@ -141,7 +163,10 @@ export default async function setup(project: TestProject): Promise<() => Promise
   project.provide('pgAppCredentials', APP_CREDENTIALS);
 
   return async () => {
-    await cluster?.stop();
-    cluster = undefined;
+    shared.users -= 1;
+    if (shared.users > 0) return;
+    shared.starting = undefined;
+    await shared.cluster?.stop();
+    shared.cluster = undefined;
   };
 }

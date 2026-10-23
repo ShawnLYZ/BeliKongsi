@@ -6,6 +6,7 @@ import type { AppDeps } from '@/server/platform/deps';
 import { withTransaction, type TxContext } from '@/server/platform/tx';
 import { CUTOFF_TIME, CUTOFF_WEEKDAY, PRODUCTS } from './catalogue';
 import { seedCurrentWeek } from './current-week';
+import { seedHistoryWeek } from './history-week';
 import { seedId } from './ids';
 import {
   HUBS,
@@ -49,8 +50,8 @@ export async function seedReferenceData(
 ): Promise<void> {
   const { tx } = ctx;
   const anchorWeek = isoWeekOf(opts.anchorMonday);
-  // Shops were set up and usual lists confirmed a week before the demo week starts.
-  const setUpAt = new Date(opts.anchorMonday.getTime() - 7 * DAY_MS);
+  // Shops were set up and usual lists confirmed a week before the history week starts.
+  const setUpAt = new Date(opts.anchorMonday.getTime() - 14 * DAY_MS);
 
   await tx.operator.create({ data: { id: seedId('operator', OPERATOR.key), name: OPERATOR.name } });
 
@@ -199,7 +200,7 @@ export async function seedReferenceData(
   });
 }
 
-/** Seeds the whole demo world in one transaction. */
+/** Seeds the whole demo world in one transaction: reference data, the history week, the demo week. */
 export async function seedDemo(deps: AppDeps, opts: { anchorMonday: Date }): Promise<void> {
   await seedProductImages(deps);
   await withTransaction(
@@ -207,7 +208,7 @@ export async function seedDemo(deps: AppDeps, opts: { anchorMonday: Date }): Pro
     systemCaller('seed demo data'),
     async (ctx) => {
       await seedReferenceData(ctx, opts);
-      // M9 adds the history week here, before the current week.
+      await seedHistoryWeek(ctx, opts.anchorMonday);
       await seedCurrentWeek(ctx, opts.anchorMonday);
     },
     { timeoutMs: 60_000 },

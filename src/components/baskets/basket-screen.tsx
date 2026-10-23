@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { ShopSettingsView } from '@/lib/views/directory';
 import type { OwnerBasketView } from '@/lib/views/baskets';
 import { BUTTON_SECONDARY } from '@/components/common/controls';
+import { TimelineSheet } from '@/components/common/timeline-sheet';
 import { Countdown } from '@/components/rounds/countdown';
 import { formatRM } from '@/lib/format';
 import { ApprovePayButton } from './approve-pay-button';
@@ -90,6 +91,7 @@ export function BasketScreen({
 
       <BasketTotals
         totals={basket.totals}
+        settled={basket.settled}
         door={basket.fulfilment === 'door'}
         payable={draft || basket.status === 'payment_pending'}
       />
@@ -106,6 +108,12 @@ export function BasketScreen({
           See receipt
         </Link>
       ) : null}
+
+      <TimelineSheet
+        subjectType="weekly_basket"
+        subjectId={basket.basketId}
+        title="Basket timeline"
+      />
     </div>
   );
 }

@@ -36,6 +36,9 @@ export function PickupDetail({ pickup }: { pickup: PickupView }) {
           Where your goods are
         </h2>
         <StatusTracker pickup={pickup} />
+        <p className="text-muted-foreground text-base">
+          Updates come from our logistics partner (Simulated).
+        </p>
       </section>
     </div>
   );

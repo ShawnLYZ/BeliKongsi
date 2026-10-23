@@ -1,3 +1,4 @@
+import { EmptyState } from '@/components/common/empty-state';
 import { SimulatedBadge } from '@/components/common/simulated-badge';
 import { ConsignmentBoard } from '@/components/ops/consignment-board';
 import { NetworkView } from '@/components/ops/network-view';
@@ -29,11 +30,21 @@ export default async function OpsConsignmentsPage() {
           consignment here stands in for the partner&rsquo;s update.
         </p>
       </div>
-      <ConsignmentBoard consignments={consignments} />
-      <NetworkView
-        consignments={consignments}
-        points={points.map((p) => ({ id: p.id, name: p.name, lat: p.lat, lng: p.lng }))}
-      />
+      {consignments.length === 0 ? (
+        <EmptyState
+          title="No goods on the road yet"
+          explanation="After a hub check, each delivery from a hub to a pickup point or a shop's door appears here by status, with its button for the partner's next step."
+          example="Klang Valley hub → Ipoh pickup point, delivery Tue 11 Nov, 4 shops. Next: Dispatched."
+        />
+      ) : (
+        <>
+          <ConsignmentBoard consignments={consignments} />
+          <NetworkView
+            consignments={consignments}
+            points={points.map((p) => ({ id: p.id, name: p.name, lat: p.lat, lng: p.lng }))}
+          />
+        </>
+      )}
     </div>
   );
 }

@@ -64,7 +64,7 @@ function LineHead({ line }: { line: PickupLineView }) {
           imageUrl: line.imageUrl,
           imageAiGenerated: line.imageAiGenerated,
         }}
-        className="size-16 shrink-0 [&_figcaption]:hidden"
+        className="w-28 shrink-0 self-start"
       />
       <div className="min-w-0">
         <p className="text-base font-semibold">{line.productName}</p>

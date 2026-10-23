@@ -47,14 +47,14 @@ export function Timeline({ items }: { items: LogEntryView[] }) {
             />
             <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
               <p className="text-base font-semibold">{actionLabel(item.action)}</p>
-              <p className="text-muted-foreground text-sm tabular-nums">
+              <p className="text-muted-foreground text-base tabular-nums">
                 <time dateTime={item.occurredAt}>{formatMyt(new Date(item.occurredAt))}</time>
                 <span className="sr-only">, </span>
                 <span className="ml-2">#{item.seq}</span>
               </p>
             </div>
             <p className="mt-1 text-base">{actorLabel(item)}</p>
-            <p className="text-muted-foreground text-sm break-all">
+            <p className="text-muted-foreground text-base break-all">
               {item.subjectType.replace(/_/g, ' ')} · {item.subjectId}
             </p>
             {item.reason ? <p className="mt-1 text-base">Reason: {item.reason}</p> : null}
@@ -63,7 +63,7 @@ export function Timeline({ items }: { items: LogEntryView[] }) {
                 <summary className="text-primary focus-visible:ring-ring/50 flex min-h-11 cursor-pointer items-center rounded-md text-base font-medium focus-visible:ring-3 focus-visible:outline-none">
                   Details
                 </summary>
-                <pre className="bg-muted mt-1 overflow-x-auto rounded-md p-3 text-sm whitespace-pre-wrap">
+                <pre className="bg-muted mt-1 overflow-x-auto rounded-md p-3 text-base whitespace-pre-wrap">
                   {JSON.stringify({ before: item.before, after: item.after }, null, 2)}
                 </pre>
               </details>

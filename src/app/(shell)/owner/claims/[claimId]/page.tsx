@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ClaimStatus } from '@/components/checks/claim-status';
+import { TimelineSheet } from '@/components/common/timeline-sheet';
 import { BUTTON_SECONDARY } from '@/components/common/controls';
 import type { ClaimView } from '@/server/modules/checks/claims';
 import { getClaimForCaller } from '@/server/modules/checks/claims';
@@ -28,6 +29,7 @@ export default async function OwnerClaimPage({ params }: { params: Promise<{ cla
     <div className="flex flex-col gap-4">
       <h1 className="text-2xl font-bold">Your claim</h1>
       <ClaimStatus claim={claim} />
+      <TimelineSheet subjectType="claim" subjectId={claimId} title="Claim timeline" />
       <Link href="/owner/pickups" className={BUTTON_SECONDARY}>
         All pickups
       </Link>

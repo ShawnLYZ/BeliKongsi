@@ -105,11 +105,11 @@ function ApprovalCard({
 
   return (
     <li className="border-t-card-top bg-card rounded-2xl border border-t-4 p-4">
-      <p className="text-muted-foreground text-sm font-semibold">{TYPE_LABELS[item.type]}</p>
-      <h2 className="mt-0.5 text-lg font-semibold">{item.summary}</h2>
+      <p className="text-muted-foreground text-base font-semibold">{TYPE_LABELS[item.type]}</p>
+      <h2 className="mt-0.5 text-lg font-semibold tabular-nums">{item.summary}</h2>
       <dl className="mt-3 flex flex-col gap-3 text-base">
         <div>
-          <dt className="text-muted-foreground text-sm font-semibold">How much</dt>
+          <dt className="text-muted-foreground text-base font-semibold">How much</dt>
           <dd>
             {item.amountSen === null ? (
               'No amount'
@@ -119,17 +119,17 @@ function ApprovalCard({
           </dd>
         </div>
         <div>
-          <dt className="text-muted-foreground text-sm font-semibold">Why approval is needed</dt>
+          <dt className="text-muted-foreground text-base font-semibold">Why approval is needed</dt>
           <dd>{item.whyNeeded}</dd>
         </div>
         <div>
-          <dt className="text-muted-foreground text-sm font-semibold">Evidence</dt>
+          <dt className="text-muted-foreground text-base font-semibold">Evidence</dt>
           <dd>
             <Evidence value={item.evidence} />
           </dd>
         </div>
         <div>
-          <dt className="text-muted-foreground text-sm font-semibold">Proposed by</dt>
+          <dt className="text-muted-foreground text-base font-semibold">Proposed by</dt>
           <dd>
             {proposer(item.proposedBy)} ·{' '}
             <time dateTime={item.createdAt}>{formatMyt(new Date(item.createdAt))}</time>

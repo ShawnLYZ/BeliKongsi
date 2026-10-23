@@ -47,6 +47,25 @@ const sumSen = (rows: { amountSen: number }[]) => rows.reduce((s, r) => s + r.am
 const moneyOk = async () => expect((await runMoneyChecks(app.prisma)).allPassed).toBe(true);
 const hubCheck = () =>
   app.prisma.hubCheck.findUniqueOrThrow({ where: { supplierOrderId: cmOrder } });
+/** This order's hub checks and allocations: the history week's are already there. */
+const hubChecks = () => app.prisma.hubCheck.count({ where: { supplierOrderId: cmOrder } });
+const allocations = async () => {
+  const parts = await app.prisma.participation.findMany({
+    where: { roundId: cmRound },
+    select: { id: true },
+  });
+  return app.prisma.allocation.count({
+    where: { participationId: { in: parts.map((p) => p.id) } },
+  });
+};
+/** Farid's payouts for this order (the history week's orders were paid a week earlier). */
+const payoutsOfOrder = async () =>
+  (
+    (await (await app.as('farid')).get(`/api/suppliers/${SUP_DRY}/payouts`)).body.items as {
+      supplierOrderId: string;
+      reference: string;
+    }[]
+  ).filter((i) => i.supplierOrderId === cmOrder);
 
 describe('The hub check', () => {
   it('pays the supplier RM 15,330.00 for 105 good cartons (stories 108, 123)', async () => {
@@ -75,14 +94,15 @@ describe('The hub check', () => {
     ).post(`/api/supplier-orders/${cmOrder}/hub-check`, { goodUnits: 105, damagedUnits: 0 });
     const res = await (await app.as('farid')).get(`/api/suppliers/${SUP_DRY}/payouts`);
     expect(res.status).toBe(200);
-    expect(res.body.items).toHaveLength(1);
-    expect(res.body.items[0]).toMatchObject({
+    const items = await payoutsOfOrder();
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
       supplierOrderId: cmOrder,
       amountSen: 1533000,
       goodUnits: 105,
       simulated: true,
     });
-    expect(res.body.items[0].reference).toMatch(/^SIM-OUT-/);
+    expect(items[0]!.reference).toMatch(/^SIM-OUT-/);
   });
 
   it('previews a 5-carton shortfall falling on the last joiner (story 122)', async () => {
@@ -102,8 +122,8 @@ describe('The hub check', () => {
     });
     expect(p.supplierPayableSen).toBe(1460000);
     expect(p.shortfallRefundSen).toBe(75925);
-    expect(await app.prisma.hubCheck.count()).toBe(0); // preview writes nothing
-    expect(await app.prisma.allocation.count()).toBe(0);
+    expect(await hubChecks()).toBe(0); // preview writes nothing
+    expect(await allocations()).toBe(0);
     expect((await order(cmOrder)).status).toBe('dispatched');
   });
 
@@ -125,7 +145,7 @@ describe('The hub check', () => {
     expect(
       (await nadia.post(`${url}?preview=true`, { goodUnits: 5, damagedUnits: -2 })).status,
     ).toBe(400);
-    expect(await app.prisma.hubCheck.count()).toBe(0);
+    expect(await hubChecks()).toBe(0);
   });
 
   it('refunds the shortfall and tells the owner why (stories 174–176)', async () => {
@@ -205,6 +225,7 @@ describe('The hub check', () => {
       where: { roundId: cmRound, status: 'kept' },
     });
     const heldSen = kept.reduce((s, p) => s + (p.finalAllInSen ?? 0) * p.quantity, 0);
+    const payoutNotices = await countWhatsapp('farid', 'supplier.payout');
     const res = await (
       await app.as('nadia')
     ).post(`/api/supplier-orders/${cmOrder}/hub-check`, { goodUnits: 0, damagedUnits: 105 });
@@ -222,11 +243,9 @@ describe('The hub check', () => {
     const hc = await hubCheck();
     expect(hc).toMatchObject({ payoutSen: 0, receivedCounted: 0, shortfallUnits: 105 });
     expect(hc.payoutReference).toMatch(/^SIM-OUT-/);
-    expect(await countWhatsapp('farid', 'supplier.payout')).toBe(0);
+    expect(await countWhatsapp('farid', 'supplier.payout')).toBe(payoutNotices);
     expect((await order(cmOrder)).status).toBe('settled');
-    expect(
-      (await (await app.as('farid')).get(`/api/suppliers/${SUP_DRY}/payouts`)).body.items,
-    ).toEqual([]);
+    expect(await payoutsOfOrder()).toEqual([]);
     await moneyOk();
   });
 
@@ -236,9 +255,9 @@ describe('The hub check', () => {
     const headers = { 'idempotency-key': 'hub-check-1' };
     const body = { goodUnits: 100, damagedUnits: 5 };
     expect((await nadia.post(`${url}?preview=true`, body, headers)).status).toBe(200);
-    expect(await app.prisma.hubCheck.count()).toBe(0);
+    expect(await hubChecks()).toBe(0);
     expect((await nadia.post(url, body, headers)).status).toBe(200);
-    expect(await app.prisma.hubCheck.count()).toBe(1);
+    expect(await hubChecks()).toBe(1);
     expect((await order(cmOrder)).status).toBe('settled');
   });
 
@@ -251,7 +270,7 @@ describe('The hub check', () => {
     expect(second.status).toBe(409);
     expect(await postingsOf('supplier_payout')).toHaveLength(1);
     expect(await postingsOf('refund_shortfall')).toHaveLength(refunds);
-    expect(await app.prisma.hubCheck.count()).toBe(1);
+    expect(await hubChecks()).toBe(1);
     await moneyOk();
   });
 

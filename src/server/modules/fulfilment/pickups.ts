@@ -6,7 +6,7 @@ import type { AppDeps } from '@/server/platform/deps';
 import { AppError, conflict, notFound, unprocessable } from '@/server/platform/errors';
 import { UUID } from '@/server/platform/ids';
 import { requireShopAccess } from '@/server/platform/permissions';
-import { withTransaction } from '@/server/platform/tx';
+import { withTransaction, type TxContext } from '@/server/platform/tx';
 import { productImageUrl } from '@/server/modules/rounds/read';
 import { HANDED_OVER, handOverPickup, handoverFrom } from './handover';
 import { destinationKeyOf, lockDestinations } from './plan';
@@ -39,39 +39,51 @@ export async function collectPickup(
   input: { code: string },
 ): Promise<PickupView> {
   if (!UUID.test(pickupId)) throw notFound('Pickup');
-  const shopId = await withTransaction(deps, caller, async (ctx) => {
-    const { tx } = ctx;
-    const head = await tx.pickup.findUnique({
-      where: { id: pickupId },
-      select: { shopId: true, destinationKey: true },
-    });
-    if (!head) throw notFound('Pickup');
-    try {
-      requireShopAccess(caller, head.shopId, SHOP_ROLES);
-    } catch (error) {
-      // Another shop's pickup is not visible at all.
-      if (error instanceof AppError && error.status === 404) throw notFound('Pickup');
-      throw error;
-    }
-    await lockShop(ctx, head.shopId);
-    await lockDestinations(ctx, [head.destinationKey]);
-    const pickup = await tx.pickup.findUniqueOrThrow({ where: { id: pickupId } });
-
-    if (input.code.replace(/\s+/g, '') !== pickup.code) {
-      throw unprocessable('WRONG_CODE', 'That code does not match this pickup. Please check it.');
-    }
-    if (pickup.status !== handoverFrom(pickup) || !(await handOverPickup(ctx, pickup))) {
-      throw conflict(
-        'NOT_READY',
-        pickup.destinationType === 'door'
-          ? 'These goods are not out for delivery.'
-          : 'These goods are not ready for pickup.',
-      );
-    }
-    return pickup.shopId;
-  });
+  const shopId = await withTransaction(deps, caller, (ctx) =>
+    handOverWithCode(ctx, pickupId, input),
+  );
   const views = await pickupViews(deps, shopId);
   return views.find((v) => v.pickupId === pickupId)!;
+}
+
+/**
+ * The hand-over itself, in the caller's transaction, as `ctx.caller` (see `collectPickup`; also
+ * the seed). Returns the pickup's shop.
+ */
+export async function handOverWithCode(
+  ctx: TxContext,
+  pickupId: string,
+  input: { code: string },
+): Promise<string> {
+  const { tx, caller } = ctx;
+  const head = await tx.pickup.findUnique({
+    where: { id: pickupId },
+    select: { shopId: true, destinationKey: true },
+  });
+  if (!head) throw notFound('Pickup');
+  try {
+    requireShopAccess(caller, head.shopId, SHOP_ROLES);
+  } catch (error) {
+    // Another shop's pickup is not visible at all.
+    if (error instanceof AppError && error.status === 404) throw notFound('Pickup');
+    throw error;
+  }
+  await lockShop(ctx, head.shopId);
+  await lockDestinations(ctx, [head.destinationKey]);
+  const pickup = await tx.pickup.findUniqueOrThrow({ where: { id: pickupId } });
+
+  if (input.code.replace(/\s+/g, '') !== pickup.code) {
+    throw unprocessable('WRONG_CODE', 'That code does not match this pickup. Please check it.');
+  }
+  if (pickup.status !== handoverFrom(pickup) || !(await handOverPickup(ctx, pickup))) {
+    throw conflict(
+      'NOT_READY',
+      pickup.destinationType === 'door'
+        ? 'These goods are not out for delivery.'
+        : 'These goods are not ready for pickup.',
+    );
+  }
+  return pickup.shopId;
 }
 
 /**

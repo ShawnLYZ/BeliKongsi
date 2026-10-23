@@ -1,5 +1,4 @@
 import type { PostingKind, Prisma } from '@/generated/prisma/client';
-import { resolveClock } from '@/server/adapters/clock';
 import { closeRound, type CloseOutcome, type CloseRoundResult, type Tier } from '@/server/engine';
 import { appendLog } from '@/server/modules/activity/log';
 import { freePickupsOf } from '@/server/modules/fulfilment/plan';
@@ -10,7 +9,7 @@ import { refundDeliveryFeeIfUnused } from '@/server/modules/payments/delivery-fe
 import { lockShop } from '@/server/modules/payments/fee';
 import { systemCaller } from '@/server/platform/caller';
 import type { AppDeps } from '@/server/platform/deps';
-import { withTransaction } from '@/server/platform/tx';
+import { inTransaction, withTransaction } from '@/server/platform/tx';
 import { draftSupplierOrder } from '@/server/modules/supplier-orders/draft';
 import { openNextRound } from './open';
 
@@ -285,15 +284,18 @@ export async function closeRoundById(
 /**
  * Closes every open round whose cut-off has come, earliest cut-off first, one transaction each.
  * A round that fails to close is logged with its whole error, counted in `failed` and left open
- * for the next run; the rest still close.
+ * for the next run; the rest still close. Inside a caller's transaction (the seed) it reads there,
+ * at that transaction's `now`, and a failure is thrown so the caller's transaction rolls back.
  */
 export async function closeDueRounds(deps: AppDeps): Promise<{ closed: number; failed: number }> {
-  const now = (await resolveClock(deps)).now();
-  const due = await deps.prisma.round.findMany({
-    where: { status: 'open', cutoffAt: { lte: now } },
-    select: { id: true },
-    orderBy: [{ cutoffAt: 'asc' }, { id: 'asc' }],
-  });
+  const due = await withTransaction(deps, systemCaller('close rounds'), ({ tx, now }) =>
+    tx.round.findMany({
+      where: { status: 'open', cutoffAt: { lte: now } },
+      select: { id: true },
+      orderBy: [{ cutoffAt: 'asc' }, { id: 'asc' }],
+    }),
+  );
+  const isolated = !inTransaction();
   let closed = 0;
   let failed = 0;
   for (const { id } of due) {
@@ -301,6 +303,7 @@ export async function closeDueRounds(deps: AppDeps): Promise<{ closed: number; f
       const { outcome } = await closeRoundById(deps, id);
       if (outcome !== 'skipped') closed += 1;
     } catch (error) {
+      if (!isolated) throw error;
       failed += 1;
       // The error itself, so its stack is logged: a round left open keeps its money held.
       console.error(`Closing round ${id} failed:`, error);

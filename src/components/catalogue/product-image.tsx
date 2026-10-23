@@ -40,7 +40,7 @@ export function ProductImage({
           className="aspect-square w-full object-cover"
         />
         {product.imageAiGenerated ? (
-          <figcaption className="text-muted-foreground px-2 py-1 text-sm">
+          <figcaption className="text-muted-foreground px-2 py-1 text-base">
             AI-generated image
           </figcaption>
         ) : null}

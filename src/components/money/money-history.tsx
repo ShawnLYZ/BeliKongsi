@@ -73,7 +73,7 @@ export function MoneyHistory({ shopId, initial }: { shopId: string; initial: Bal
                 <p className="text-muted-foreground text-base">
                   Balance after: <Money sen={item.runningBalanceSen} />
                 </p>
-                {item.reason ? <p className="text-base">{item.reason}</p> : null}
+                {item.reason ? <p className="text-base tabular-nums">{item.reason}</p> : null}
               </li>
             ))}
           </ul>
