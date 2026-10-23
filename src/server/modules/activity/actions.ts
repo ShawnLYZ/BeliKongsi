@@ -20,6 +20,7 @@ export const ACTIONS = [
   'refund.issued',
   'round.opened',
   'round.closed',
+  'round.completed',
   'participation.joined',
   'participation.cancelled',
   'participation.dropped_price_limit',

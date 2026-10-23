@@ -42,7 +42,7 @@ describe('Background shop automation', () => {
   it('collects background shops’ pickups automatically, labelled as simulation (story 133)', async () => {
     await toIpoh();
     const bg = await pickupOf(BG_IPOH_SHOP, DATE);
-    expect(bg.status).toBe('collected');
+    expect(bg.status).toBe('closed');
     expect(bg.collectedAt).not.toBeNull();
     const e = await getDeps().prisma.activityLogEntry.findFirstOrThrow({
       where: { action: 'fulfilment.pickup_collected', subjectId: bg.id },
@@ -69,7 +69,7 @@ describe('Background shop automation', () => {
     expect((await pickupOf(BG_DOOR_SHOP, DATE)).status).toBe('out_for_delivery');
     await doorMoves(BG_DOOR_SHOP, ['delivered']);
     const p = await pickupOf(BG_DOOR_SHOP, DATE);
-    expect(p.status).toBe('delivered');
+    expect(p.status).toBe('closed');
     const e = await getDeps().prisma.activityLogEntry.findFirstOrThrow({
       where: { action: 'fulfilment.delivered', subjectId: p.id },
     });

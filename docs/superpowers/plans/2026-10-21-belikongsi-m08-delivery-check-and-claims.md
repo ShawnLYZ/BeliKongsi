@@ -31,6 +31,15 @@
 4. **A photo id from another pickup attached to this check:** 422 `PHOTO_NOT_FOUND`. Pinned in Task 2.
 5. **A signed photo link opened after 10 minutes:** 403. Pinned in Task 1.
 
+## Re-sync notes (Task 0, against the code as built)
+
+- `StorageAdapter` (`src/server/adapters/storage/types.ts`) today is only `publicUrl('product-images', key)` and `putObject(bucket, key, bytes, contentType)`; `Bucket` is already exported. `getObject` exists only on `LocalStorage` (`local.ts`), and `createLocalStorage({ dir, secret })` has no clock. `deps.ts` passes `secret: env.SESSION_SECRET`; `tests/api/helpers/app.ts` passes a fixed test secret and a fixed clock that the adapter cannot see.
+- The local storage route today serves only `GET` of `product-images` and 404s every other bucket.
+- `callRoute` (`tests/api/helpers/route.ts`) JSON-stringifies any non-string body, so it cannot send photo bytes yet.
+- `decideApproval` already refuses a reject without a reason (422 `REASON_REQUIRED`) before any handler runs, and throws a plain `Error` when no handler is registered for the type. No `claim` handler exists yet.
+- `DeliveryCheck.submittedByUserId` is required, but background shops have no user.
+- Nothing sets a round to `completed` today.
+
 ---
 
 ### Task 0: Re-sync
@@ -50,7 +59,11 @@
 **Files:**
 
 - Create: `src/server/modules/checks/photos.ts`, `src/app/api/pickups/[pickupId]/photos/route.ts`
-- Modify: `src/server/adapters/storage/types.ts`, `local.ts`, `supabase.ts`; `src/app/api/storage/local/[...path]/route.ts` (signed `PUT` and `GET` for `delivery-photos`)
+- Modify:
+  - `src/server/adapters/storage/types.ts`, `local.ts`, `supabase.ts`
+  - `src/server/platform/deps.ts` and `tests/api/helpers/app.ts` (pass the clock to `createLocalStorage`)
+  - `src/app/api/storage/local/[...path]/route.ts` (add signed `PUT`, with `maxBodyBytes` of 8 MiB and `auth: 'public'` because the signature is the credential; add signed `GET` for `delivery-photos`; `product-images` stays public)
+  - `tests/api/helpers/route.ts` (`callRoute` must pass a `Uint8Array` or `Buffer` body through unchanged instead of JSON-stringifying it)
 - Test: `tests/api/photos.test.ts`
 
 **Interfaces:**
@@ -61,6 +74,8 @@
     - `createSignedReadUrl(bucket: 'delivery-photos', key: string, expiresInSeconds: number): Promise<string>`
     - `statObject(bucket: Bucket, key: string): Promise<{ sizeBytes: number; contentType: string } | null>`
     - `deleteObject(bucket: Bucket, key: string): Promise<void>`
+  - `createLocalStorage` gains `now: () => Date` in its options (the deps clock), so signed URLs and their expiry follow the Clock (G4); `LocalStorage` already has `getObject`, which the signed `GET` uses. The existing storage tests call `createLocalStorage({ dir, secret })` without it, so `now` is optional and defaults to the system clock.
+  - Supabase: `createSignedUploadUrl(path)` has a fixed lifetime and cannot enforce size or type, and `createSignedUrl(path, seconds)` takes the read lifetime. So `createSupabaseStorage` returns the signed upload URL with the headers the SDK needs and relies on the bucket's 5 MB and image-only limits. The server re-checks with `statObject` when the check is submitted (an object that is missing or over 5 MB is `PHOTO_NOT_FOUND`).
   - Local signed URLs look like `/api/storage/local/delivery-photos/<key>?op=put|get&exp=<unix>&ct=<type>&max=<bytes>&sig=<base64url HMAC-SHA256(secret, op|bucket|key|exp|ct|max)>`.
     - A bad or expired signature gets 403.
     - A `PUT` whose body is larger than `max`, or whose content type isn't `ct`, gets 422.
@@ -128,9 +143,10 @@ it("keeps photos to the shop's members and Ops (story 147)", async () => {
 
 **Files:**
 
-- Create: `src/server/modules/checks/delivery-check.ts`, `src/app/api/pickups/[pickupId]/delivery-check/route.ts`
+- Create: `src/server/modules/checks/delivery-check.ts`, `src/app/api/pickups/[pickupId]/delivery-check/route.ts`, a Prisma migration
 - Modify:
-  - `src/server/modules/fulfilment/background.ts`: background shops submit "All received" automatically.
+  - `prisma/schema.prisma`: `DeliveryCheck.submittedByUserId` becomes optional (background shops have no user; the system submits their check).
+  - `src/server/modules/fulfilment/background.ts`: `runBackgroundAutomation(outer: TxContext, pickupIds: string[]): Promise<number>` hands over background pickups and then, in the same transaction, records "All received" for each one it handed over, through an in-transaction function that `submitDeliveryCheck` shares.
   - `src/server/modules/rounds/completion.ts` (new): `refreshRoundCompletion`.
   - `src/server/modules/notifications/templates.ts`: `claim.submitted`, `ops.claim_needed`.
 - Test: `tests/api/delivery-check.test.ts`
@@ -206,7 +222,9 @@ it('keeps prices out of the staff check (story 77)', async () =>
 **Files:**
 
 - Create: `src/server/modules/checks/claims.ts`, `src/app/api/claims/[claimId]/route.ts`
-- Modify: `src/server/modules/notifications/templates.ts` (`claim.decided`)
+- Modify:
+  - `src/server/modules/notifications/templates.ts` (`claim.decided`)
+  - `src/server/modules/approvals/approvals.ts`: register the `claim` handler there with arrow functions, as `supplier_order` does, because the claims module imports `approvals.ts` back. `approvalLink` for `claim` currently falls through to `/approvals/<id>`; Task 5 points it at the claim page.
 - Test: `tests/api/claims.test.ts`
 
 **Interfaces:**
@@ -216,7 +234,7 @@ it('keeps prices out of the staff check (story 77)', async () =>
     - **Approve:** posts `claims_expense → shop_balance` (`refund_claim`, `claimId`). The claim becomes `approved`, and the pickup and participations `closed`. It runs `refreshRoundCompletion`, logs `claim.approved` and `refund.issued`, and emits `claim.decided { claimId, shopId, units, decision: 'approved', refundSen }` and `refund.issued { kind: 'claim' }`. Messages:
       - owner: `Claim approved: {RM total} refunded for {units} {missing|damaged|missing or damaged}.`, e.g. "Claim approved: RM 151.85 refunded for 1 damaged carton."
       - staff: `Claim approved for {units} {…}.`
-    - **Reject** (reason required): the claim becomes `rejected`, and the pickup and participations `closed`. It logs `claim.rejected` and emits `claim.decided { decision: 'rejected', refundSen: 0 }`. Owner and staff are told `Claim rejected: {reason}.`
+    - **Reject** (reason required; `decideApproval` already answers 422 `REASON_REQUIRED` before the handler runs, so the handler can rely on `input.reason`): the claim becomes `rejected`, and the pickup and participations `closed`. It logs `claim.rejected` and emits `claim.decided { decision: 'rejected', refundSen: 0 }`. Owner and staff are told `Claim rejected: {reason}.`
   - `getClaimForCaller(deps, caller, claimId): Promise<ClaimView>`. The owner of the shop and Ops can read it; others get 404.
     - `ClaimView = { claimId; status; totalRefundSen; reason; lines: { productName; missing; damaged; refundSen; photoUrls: string[] }[]; check: { submittedBy; submittedAt; lines }; hubCheck: { goodUnits; damagedUnits; notes; checkedAt }; consignmentHistory: { status; at }[] }`.
     - Photo URLs are 10-minute signed links.

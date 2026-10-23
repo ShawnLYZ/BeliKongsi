@@ -18,6 +18,10 @@ export interface PickupLineView {
   productName: string;
   unitName: string;
   quantity: number;
+  /** The product picture, for the delivery check; `category` picks the icon without one. */
+  category: string;
+  imageUrl: string | null;
+  imageAiGenerated: boolean;
 }
 
 /**
@@ -36,5 +40,7 @@ export interface PickupView {
   status: PickupStatusView;
   statusLabel: PickupStatusLabel;
   code: string | null;
+  /** The claim opened by this pickup's delivery check, if it reported a problem. */
+  claimId: string | null;
   lines: PickupLineView[];
 }

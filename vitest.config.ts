@@ -15,6 +15,7 @@ export default defineConfig({
         test: {
           name: 'engine',
           environment: 'node',
+          sequence: { groupOrder: 1 },
           include: ['tests/engine/**/*.test.ts', 'tests/unit/**/*.test.ts'],
         },
       },
@@ -24,6 +25,10 @@ export default defineConfig({
           name: 'api',
           include: ['tests/api/**/*.test.ts'],
           pool: 'forks',
+          // CREATE DATABASE ... TEMPLATE serialises cluster-wide; many parallel forks starve it.
+          maxWorkers: 4,
+          // Projects with different maxWorkers need distinct groups.
+          sequence: { groupOrder: 2 },
           testTimeout: 30_000,
           hookTimeout: 120_000,
           globalSetup: ['tests/setup/pg-global-setup.ts'],

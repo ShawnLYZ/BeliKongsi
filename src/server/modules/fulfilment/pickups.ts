@@ -7,6 +7,7 @@ import { AppError, conflict, notFound, unprocessable } from '@/server/platform/e
 import { UUID } from '@/server/platform/ids';
 import { requireShopAccess } from '@/server/platform/permissions';
 import { withTransaction } from '@/server/platform/tx';
+import { productImageUrl } from '@/server/modules/rounds/read';
 import { HANDED_OVER, handOverPickup, handoverFrom } from './handover';
 import { destinationKeyOf, lockDestinations } from './plan';
 
@@ -104,14 +105,34 @@ type Part = {
   pickupPointId: string | null;
   shopId: string;
   deliveryDate: string;
-  round: { status: RoundStatus; product: { name: string; unitName: string } };
+  round: {
+    status: RoundStatus;
+    product: {
+      name: string;
+      unitName: string;
+      category: string;
+      imageKey: string | null;
+      imageAiGenerated: boolean;
+    };
+  };
 };
 
 /** Every pickup and not-yet-planned group of a shop, by delivery date (soonest first). */
 async function pickupViews(deps: AppDeps, shopId: string): Promise<PickupView[]> {
   const db = deps.prisma;
   const roundSelect = {
-    select: { status: true, product: { select: { name: true, unitName: true } } },
+    select: {
+      status: true,
+      product: {
+        select: {
+          name: true,
+          unitName: true,
+          category: true,
+          imageKey: true,
+          imageAiGenerated: true,
+        },
+      },
+    },
   } as const;
   const [pickups, kept, shop] = await Promise.all([
     db.pickup.findMany({ where: { shopId }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] }),
@@ -124,6 +145,16 @@ async function pickupViews(deps: AppDeps, shopId: string): Promise<PickupView[]>
   ]);
   const allocations = await db.allocation.findMany({
     where: { pickupId: { in: pickups.map((p) => p.id) }, allocated: { gt: 0 } },
+  });
+  const claims = await db.claim.findMany({
+    where: { deliveryCheck: { pickupId: { in: pickups.map((p) => p.id) } } },
+    select: { id: true, deliveryCheck: { select: { pickupId: true } } },
+  });
+  const claimOf = new Map(claims.map((c) => [c.deliveryCheck.pickupId, c.id]));
+  const pictureOf = (product: Part['round']['product']) => ({
+    category: product.category,
+    imageUrl: productImageUrl(deps, product),
+    imageAiGenerated: product.imageAiGenerated,
   });
   const [allocated, consignments] = await Promise.all([
     db.participation.findMany({
@@ -164,6 +195,7 @@ async function pickupViews(deps: AppDeps, shopId: string): Promise<PickupView[]>
     productName: p.round.product.name,
     unitName: p.round.product.unitName,
     quantity: p.quantity,
+    ...pictureOf(p.round.product),
   });
   const byName = (a: PickupLineView, b: PickupLineView) =>
     a.productName.localeCompare(b.productName);
@@ -177,6 +209,7 @@ async function pickupViews(deps: AppDeps, shopId: string): Promise<PickupView[]>
         productName: part.round.product.name,
         unitName: part.round.product.unitName,
         quantity: a.allocated,
+        ...pictureOf(part.round.product),
       };
     });
     const leftHub = own.some((a) => {
@@ -191,6 +224,7 @@ async function pickupViews(deps: AppDeps, shopId: string): Promise<PickupView[]>
       status: p.status,
       statusLabel: labelOf(p, leftHub),
       code: p.code,
+      claimId: claimOf.get(p.id) ?? null,
       lines: lines.sort(byName),
     };
   });
@@ -206,6 +240,7 @@ async function pickupViews(deps: AppDeps, shopId: string): Promise<PickupView[]>
       status: 'waiting',
       statusLabel: allSent ? 'On its way to the hub' : 'Waiting for supplier',
       code: null,
+      claimId: null,
       lines: parts.map(keptLine).sort(byName),
     });
   }

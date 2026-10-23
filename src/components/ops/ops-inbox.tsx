@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { ApprovalView } from '@/server/modules/approvals/approvals';
 import { EmptyState } from '@/components/common/empty-state';
@@ -9,11 +10,11 @@ import { formatMyt } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { ApprovalPanel, evidenceOf, moneyCheckPassed } from './approval-panel';
 import { CheckMark } from './check-mark';
-import { TABLE, TABLE_WRAP, TD, TD_NUM, TH, TH_NUM } from './labels';
+import { LINK, TABLE, TABLE_WRAP, TD, TD_NUM, TH, TH_NUM } from './labels';
 
 /**
  * The Ops approvals inbox: supplier orders and claims in tables, and the chosen approval in a
- * panel beside them. Claims arrive in a later milestone (M8), so that table is empty for now.
+ * panel beside them. A claim opens on its own review screen.
  */
 export function OpsInbox({ initialItems }: { initialItems: ApprovalView[] }) {
   const router = useRouter();
@@ -107,11 +108,52 @@ export function OpsInbox({ initialItems }: { initialItems: ApprovalView[] }) {
           <h2 id="claims-title" className="text-lg font-semibold">
             Claims <span className="tabular-nums">({claims.length})</span>
           </h2>
-          <EmptyState
-            title="No claims waiting"
-            explanation="When a shop reports missing or damaged goods, the claim waits here with its photos for your review."
-            example="Claim: 2 cartons of condensed milk damaged, RM 303.70."
-          />
+          {claims.length === 0 ? (
+            <EmptyState
+              title="No claims waiting"
+              explanation="When a shop reports missing or damaged goods, the claim waits here with its photos for your review."
+              example="Claim: 2 cartons of condensed milk damaged, RM 303.70."
+            />
+          ) : (
+            <div className={TABLE_WRAP}>
+              <table className={TABLE}>
+                <caption className="sr-only">Claims waiting for review</caption>
+                <thead className="bg-muted">
+                  <tr>
+                    <th scope="col" className={TH}>
+                      Claim
+                    </th>
+                    <th scope="col" className={TH_NUM}>
+                      Refund asked
+                    </th>
+                    <th scope="col" className={TH}>
+                      Reported
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {claims.map((c) => (
+                    <tr key={c.id} className="hover:bg-muted/50 border-t">
+                      <td className={TD}>
+                        <Link
+                          href={c.link}
+                          className={cn(LINK, 'inline-flex min-h-11 items-center')}
+                        >
+                          {c.summary}
+                        </Link>
+                      </td>
+                      <td className={TD_NUM}>
+                        {c.amountSen === null ? '—' : <Money sen={c.amountSen} />}
+                      </td>
+                      <td className={cn(TD, 'whitespace-nowrap')}>
+                        <time dateTime={c.createdAt}>{formatMyt(new Date(c.createdAt))}</time>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
       </div>
 

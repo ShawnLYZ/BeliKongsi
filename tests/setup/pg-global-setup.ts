@@ -21,6 +21,16 @@ const root = resolve(import.meta.dirname, '../..');
 
 let cluster: Cluster | undefined;
 
+// embedded-postgres registers an async-exit-hook that calls process.exit(0) on 'beforeExit',
+// which would overwrite the exit code vitest sets for failing tests. Remember it and restore it.
+let savedExitCode: typeof process.exitCode;
+process.prependListener('beforeExit', () => {
+  savedExitCode = process.exitCode;
+});
+process.on('exit', () => {
+  if (savedExitCode) process.exitCode = savedExitCode;
+});
+
 function listMigrationFiles(): string[] {
   return globSync('prisma/migrations/**/*', { cwd: root })
     .map((f) => f.replace(/\\/g, '/'))

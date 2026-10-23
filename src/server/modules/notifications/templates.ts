@@ -197,4 +197,75 @@ export const TEMPLATES = defineTemplates({
     const text = 'Your goods were delivered. Please check them now.';
     return () => ({ title: 'Delivered', body: text, whatsappText: text });
   },
+  // Owner: who reported, what and the claim total. Staff: the same without the amount.
+  'claim.submitted': (data: {
+    reporterName: string;
+    lines: { missing: number; damaged: number; unitName: string; shortName: string }[];
+    totalSen: number;
+  }) => {
+    const phrase = (l: (typeof data.lines)[number], withKind: boolean) => {
+      const base = `${formatUnits(l.missing + l.damaged, l.unitName)} of ${l.shortName}`;
+      if (!withKind) return base;
+      const kind =
+        l.missing > 0 && l.damaged > 0
+          ? 'missing and damaged'
+          : l.missing > 0
+            ? 'missing'
+            : 'damaged';
+      return `${base} (${kind})`;
+    };
+    // A long list is shortened so the message stays within the WhatsApp limit.
+    const join = (withKind: boolean) => {
+      const all = data.lines.map((l) => phrase(l, withKind));
+      return all.length > 3
+        ? `${all.slice(0, 2).join(', ')} and ${all.length - 2} more`
+        : all.join(', ');
+    };
+    const owner = `${data.reporterName} reported a problem: ${join(true)}. Claim for ${formatRM(data.totalSen)} sent to BeliKongsi.`;
+    const staff = `Problem reported: ${join(false)}. BeliKongsi will check it.`;
+    return (role: Role) => ({
+      title: 'Problem reported',
+      body: role === 'staff' ? staff : owner,
+      whatsappText: role === 'staff' ? staff : owner,
+    });
+  },
+  // Owner: the decision with the refund. Staff: the same without the amount. A rejection gives
+  // Ops's reason to both. The unit phrase puts the adjective before the unit noun.
+  'claim.decided': (
+    data:
+      | {
+          decision: 'approved';
+          refundSen: number;
+          units: number;
+          kind: 'missing' | 'damaged' | 'missing or damaged';
+          unitName: string;
+        }
+      | { decision: 'rejected'; reason: string },
+  ) => {
+    if (data.decision === 'rejected') {
+      const reason = data.reason.trim().replace(/[\s.,;:!?]+$/, '');
+      const prefix = 'Claim rejected: ';
+      const room = 300 - prefix.length - 1;
+      const short =
+        reason.length > room ? `${reason.slice(0, Math.max(room, 1) - 1).trimEnd()}…` : reason;
+      return () => ({
+        title: 'Claim rejected',
+        body: `${prefix}${reason}.`,
+        whatsappText: `${prefix}${short}.`,
+      });
+    }
+    const phrase = formatUnits(data.units, `${data.kind} ${data.unitName}`);
+    const owner = `Claim approved: ${formatRM(data.refundSen)} refunded for ${phrase}.`;
+    const staff = `Claim approved for ${phrase}.`;
+    return (role: Role) => ({
+      title: 'Claim approved',
+      body: role === 'staff' ? staff : owner,
+      whatsappText: role === 'staff' ? staff : owner,
+    });
+  },
+  // Ops only: a claim waits for a decision.
+  'ops.claim_needed': (data: { shopName: string; totalSen: number }) => {
+    const text = `Claim awaiting decision: ${data.shopName}, ${formatRM(data.totalSen)}.`;
+    return () => ({ title: 'Claim awaiting decision', body: text, whatsappText: text });
+  },
 });

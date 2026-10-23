@@ -1,0 +1,16 @@
+# Keep secrets and local-only material out of deployments.
+API_Key_Configuration.md
+.env
+.env.*
+!.env.example
+.superpowers
+.data
+.claude
+test-results
+playwright-report
+tests
+docs
+PRD.md
+belibijak-product-features.md
+*.pdf
+skills-lock.json

@@ -37,6 +37,7 @@ export async function createTestDeps(opts: { now?: string } = {}): Promise<{
     storage: createLocalStorage({
       dir: storageDir,
       secret: 'a-session-secret-that-is-long-enough-0123456789',
+      now: () => clock.now(),
     }),
     env: {
       DATABASE_URL: db.appUrl,

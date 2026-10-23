@@ -23,9 +23,7 @@ function Confirmation({ door }: { door: boolean }) {
       className="border-primary bg-primary/10 flex items-start gap-3 rounded-2xl border-2 p-5"
     >
       <CheckCircle2 aria-hidden="true" className="text-primary size-8 shrink-0" />
-      <p className="text-lg font-semibold">
-        {door ? 'Delivered.' : 'Collected.'} Next: check your goods (coming soon)
-      </p>
+      <p className="text-lg font-semibold">{door ? 'Delivered.' : 'Collected.'}</p>
     </section>
   );
 }

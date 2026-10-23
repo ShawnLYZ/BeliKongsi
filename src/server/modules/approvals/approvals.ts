@@ -11,6 +11,7 @@ import type { AppDeps } from '@/server/platform/deps';
 import { conflict, forbidden, notFound, unprocessable } from '@/server/platform/errors';
 import { withTransaction, type TxContext } from '@/server/platform/tx';
 import { approvalLink } from './links';
+import { approveClaim, rejectClaim } from '../checks/claims';
 import { skipDraftBasket } from '../baskets/lifecycle';
 import { approveSupplierOrder, rejectSupplierOrder } from '../supplier-orders/ops-decision';
 import {
@@ -221,4 +222,11 @@ registerApprovalHandler('supplier_order', {
 registerApprovalHandler('supplier_confirmation', {
   onApprove: (ctx, request, input) => confirmSupplierOrder(ctx, request, input),
   onReject: (ctx, request, input) => rejectSupplierOrderBySupplier(ctx, request, input),
+});
+
+// Ops approves a claim (refund to the shop) or rejects it with a reason. Arrow functions again,
+// because the claims module imports this module back.
+registerApprovalHandler('claim', {
+  onApprove: (ctx, request) => approveClaim(ctx, request),
+  onReject: (ctx, request, input) => rejectClaim(ctx, request, input),
 });

@@ -16,5 +16,39 @@ export function createSupabaseStorage(opts: {
         .upload(key, bytes, { contentType, upsert: true });
       if (error) throw new Error(`Storage upload failed: ${error.message}`);
     },
+    // The SDK's signed upload URL has a fixed lifetime and cannot enforce size or type, so the
+    // bucket's own 5 MB and image-only limits apply and the server re-checks with statObject.
+    async createSignedUploadUrl(bucket, key, opts) {
+      const { data, error } = await client.storage
+        .from(bucket)
+        .createSignedUploadUrl(key, { upsert: false });
+      if (error) throw new Error(`Storage signing failed: ${error.message}`);
+      return { url: data.signedUrl, method: 'PUT', headers: { 'content-type': opts.contentType } };
+    },
+    async createSignedReadUrl(bucket, key, expiresInSeconds) {
+      const { data, error } = await client.storage
+        .from(bucket)
+        .createSignedUrl(key, expiresInSeconds);
+      if (error) throw new Error(`Storage signing failed: ${error.message}`);
+      return data.signedUrl;
+    },
+    async statObject(bucket, key) {
+      const slash = key.lastIndexOf('/');
+      const dir = slash < 0 ? '' : key.slice(0, slash);
+      const name = key.slice(slash + 1);
+      const { data, error } = await client.storage.from(bucket).list(dir, { search: name });
+      if (error) throw new Error(`Storage lookup failed: ${error.message}`);
+      const found = data.find((o) => o.name === name);
+      if (!found) return null;
+      const meta = (found.metadata ?? {}) as { size?: number; mimetype?: string };
+      return {
+        sizeBytes: meta.size ?? 0,
+        contentType: meta.mimetype ?? 'application/octet-stream',
+      };
+    },
+    async deleteObject(bucket, key) {
+      const { error } = await client.storage.from(bucket).remove([key]);
+      if (error) throw new Error(`Storage delete failed: ${error.message}`);
+    },
   };
 }

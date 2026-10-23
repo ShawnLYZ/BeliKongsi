@@ -92,8 +92,11 @@ export async function callRoute(
   }
 
   const headers = new Headers(init.headers);
-  let body: string | undefined;
-  if (init.body !== undefined) {
+  let body: string | Uint8Array<ArrayBuffer> | undefined;
+  if (init.body instanceof Uint8Array) {
+    // Binary bodies (Buffer included) go through unchanged.
+    body = new Uint8Array(init.body);
+  } else if (init.body !== undefined) {
     body = typeof init.body === 'string' ? init.body : JSON.stringify(init.body);
     if (typeof init.body !== 'string' && !headers.has('content-type')) {
       headers.set('content-type', 'application/json');

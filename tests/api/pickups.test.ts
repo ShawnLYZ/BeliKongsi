@@ -171,7 +171,7 @@ describe('Collecting at the pickup point', () => {
       runBackgroundAutomation(ctx, [bg.id]),
     );
     expect((await app.prisma.pickup.findUniqueOrThrow({ where: { id: bg.id } })).status).toBe(
-      'collected',
+      'closed',
     );
     expect((await consignmentFor(KV_IPOH)).status).toBe('completed');
   });

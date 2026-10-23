@@ -133,6 +133,24 @@ export async function getBalanceView(
     },
   });
   const partById = new Map(parts.map((x) => [x.id, x]));
+  // A claim refund names the products it was for (its posting carries the claim, not the line).
+  const claimIds = postings.flatMap((x) => (x.claimId ? [x.claimId] : []));
+  const claimLines = await db.claimLine.findMany({
+    where: { claimId: { in: claimIds } },
+    include: { allocation: { select: { participationId: true } } },
+    orderBy: { id: 'asc' },
+  });
+  const claimParts = await db.participation.findMany({
+    where: { id: { in: claimLines.map((l) => l.allocation.participationId) } },
+    select: { id: true, round: { select: { product: { select: { shortName: true } } } } },
+  });
+  const shortNameOfPart = new Map(claimParts.map((x) => [x.id, x.round.product.shortName]));
+  const claimProducts = new Map<string, string[]>();
+  for (const l of claimLines) {
+    const name = shortNameOfPart.get(l.allocation.participationId)!;
+    const names = claimProducts.get(l.claimId) ?? [];
+    if (!names.includes(name)) claimProducts.set(l.claimId, [...names, name]);
+  }
 
   const entries: Entry[] = [];
   const usedByPayment = new Map<string, Entry>();
@@ -172,7 +190,7 @@ export async function getBalanceView(
     const name = part?.round.product.shortName ?? 'your order';
     const isClaim = x.kind === 'refund_claim';
     const label = isClaim
-      ? `Claim refund: ${name}`
+      ? `Claim refund: ${(x.claimId && claimProducts.get(x.claimId)?.join(' and ')) || name}`
       : x.kind === 'refund_delivery_fee'
         ? 'Refund: delivery fee no longer needed'
         : (REFUND_LABEL[x.kind]?.(name) ?? `Refund: ${name}`);

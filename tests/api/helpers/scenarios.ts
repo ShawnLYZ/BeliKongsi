@@ -4,6 +4,7 @@ import { SAMPLE_USUAL_PRICES_SEN } from '../../../prisma/seed/sample-order';
 import type { PaymentSummary } from '@/lib/views/payments';
 import { getDeps } from '@/server/platform/deps';
 import type { TestApp } from './app';
+import { callRoute } from './route';
 
 const p = (key: string) => seedId('product', key);
 const productKeyOf = new Map(PRODUCTS.map((x, i) => [p(x.key), { key: x.key, order: i }]));
@@ -290,4 +291,30 @@ export async function moveConsignment(app: TestApp, consignmentId: string, statu
   const res = await nadia.post(`/api/consignments/${consignmentId}/status`, { status });
   if (res.status !== 200) throw new Error(`moving consignment to ${status} failed: ${res.status}`);
   return res.body;
+}
+
+/**
+ * Uploads a small JPEG to a pickup the way the browser does: asks for a signed link, then PUTs
+ * the bytes. Returns the photo id. Throws unless both steps answer 200.
+ */
+export async function uploadPhoto(
+  client: { post(path: string, body?: unknown): Promise<{ status: number; body: unknown }> },
+  pickupId: string,
+  sizeBytes = 2048,
+): Promise<string> {
+  const asked = await client.post(`/api/pickups/${pickupId}/photos`, {
+    contentType: 'image/jpeg',
+    sizeBytes,
+  });
+  if (asked.status !== 200) throw new Error(`photo request failed: ${asked.status}`);
+  const { photoId, upload } = asked.body as {
+    photoId: string;
+    upload: { url: string; headers: Record<string, string> };
+  };
+  const put = await callRoute('PUT', upload.url, {
+    body: new Uint8Array(sizeBytes).fill(0xff),
+    headers: upload.headers,
+  });
+  if (put.status !== 200) throw new Error(`photo upload failed: ${put.status}`);
+  return photoId;
 }

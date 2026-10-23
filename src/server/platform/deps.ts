@@ -42,7 +42,11 @@ export function getDeps(): AppDeps {
               url: env.SUPABASE_URL!,
               serviceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY!,
             })
-          : createLocalStorage({ dir: '.data/storage', secret: env.SESSION_SECRET }),
+          : createLocalStorage({
+              dir: '.data/storage',
+              secret: env.SESSION_SECRET,
+              now: () => systemClock.now(),
+            }),
     };
   }
   return current;

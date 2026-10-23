@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { BUTTON_SECONDARY } from '@/components/common/controls';
+import { DeliveryCheckForm } from '@/components/checks/delivery-check-form';
 import { CollectPanel } from '@/components/pickups/collect-panel';
 import { PickupFacts } from '@/components/pickups/pickup-facts';
 import { listShopPickups } from '@/server/modules/fulfilment/pickups';
@@ -29,6 +30,7 @@ export default async function StaffDeliveryPage({
       <h1 className="text-2xl font-bold">Confirm delivery</h1>
       <PickupFacts pickup={pickup} />
       <CollectPanel pickup={pickup} />
+      <DeliveryCheckForm pickup={pickup} claimBase={null} />
       <Link href="/staff/deliveries" className={BUTTON_SECONDARY}>
         All pickups
       </Link>
