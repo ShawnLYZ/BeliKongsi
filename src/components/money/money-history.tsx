@@ -3,10 +3,11 @@
 import { useState } from 'react';
 import type { BalanceView, MoneyHistoryItem } from '@/lib/views/payments';
 import { apiFetch } from '@/components/common/api-client';
-import { BUTTON_SECONDARY } from '@/components/common/controls';
+import { BUTTON_PRIMARY, BUTTON_SECONDARY } from '@/components/common/controls';
 import { EmptyState } from '@/components/common/empty-state';
 import { Money } from '@/components/common/money';
 import { formatMyt, formatRM } from '@/lib/format';
+import { WithdrawSheet } from './withdraw-sheet';
 
 function change(item: MoneyHistoryItem): string {
   if (item.balanceChangeSen > 0) return `+${formatRM(item.balanceChangeSen)} to your balance`;
@@ -19,6 +20,22 @@ export function MoneyHistory({ shopId, initial }: { shopId: string; initial: Bal
   const [items, setItems] = useState(initial.history.items);
   const [cursor, setCursor] = useState(initial.history.nextCursor);
   const [loading, setLoading] = useState(false);
+  const [balanceSen, setBalanceSen] = useState(initial.balanceSen);
+  const [availableSen, setAvailableSen] = useState(initial.availableSen);
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
+
+  /** After a withdrawal: the new balance and a fresh first page of the history. */
+  async function reload() {
+    try {
+      const page = await apiFetch<BalanceView>(`/api/shops/${shopId}/balance`);
+      setBalanceSen(page.balanceSen);
+      setAvailableSen(page.availableSen);
+      setItems(page.history.items);
+      setCursor(page.history.nextCursor);
+    } catch {
+      // Shown as a toast by apiFetch.
+    }
+  }
 
   async function more() {
     if (!cursor) return;
@@ -41,9 +58,33 @@ export function MoneyHistory({ shopId, initial }: { shopId: string; initial: Bal
       <section className="bg-primary/10 flex flex-col gap-1 rounded-2xl p-4">
         <h2 className="text-base font-medium">Your BeliKongsi balance</h2>
         <p className="text-3xl font-bold">
-          <Money sen={initial.balanceSen} />
+          <Money sen={balanceSen} />
         </p>
         <p className="text-base">Refunds land here. It is used first the next time you pay.</p>
+        <button
+          type="button"
+          className={`${BUTTON_PRIMARY} mt-2`}
+          disabled={availableSen <= 0}
+          onClick={() => setWithdrawOpen(true)}
+        >
+          Withdraw (Simulated)
+        </button>
+        {availableSen < balanceSen ? (
+          <p className="text-base">
+            <Money sen={balanceSen - availableSen} /> is set aside for a payment you have started.
+          </p>
+        ) : null}
+        {availableSen <= 0 ? (
+          <p className="text-muted-foreground text-base">Nothing to withdraw yet.</p>
+        ) : null}
+        <WithdrawSheet
+          shopId={shopId}
+          balanceSen={balanceSen}
+          availableSen={availableSen}
+          open={withdrawOpen}
+          onOpenChange={setWithdrawOpen}
+          onDone={() => void reload()}
+        />
       </section>
 
       <section aria-labelledby="money-history" className="flex flex-col gap-3">

@@ -9,6 +9,7 @@ import { systemCaller } from '@/server/platform/caller';
 import type { AppDeps } from '@/server/platform/deps';
 import { inTransaction, withTransaction, type TxContext } from '@/server/platform/tx';
 import { basketTotals } from './amounts';
+import { evaluateAutoApprove } from './auto-approve';
 
 const HOUR = 3_600_000;
 /** Baskets are drafted from Monday 06:00 Malaysia time. */
@@ -18,12 +19,14 @@ const DRAFT_AFTER_WEEK_START_MS = 6 * HOUR;
  * Drafts the shop's basket for `basketWeek` from its usual list, merging into a draft that already
  * holds staff additions. Returns `basketId: null` when there is nothing to put in it; `created` is
  * true only when this call drafted the basket. A basket already drafted, paid, skipped or expired
- * is left alone.
+ * is left alone. The owner's auto-approve rule is checked only when `autoApprove` is set, which
+ * only the weekly job (`draftWeeklyBaskets`) does: a list saved mid-week leaves a plain draft.
  */
 export async function draftBasketForShop(
   ctx: TxContext,
   shopId: string,
   basketWeek: string,
+  opts: { autoApprove?: boolean } = {},
 ): Promise<{ basketId: string | null; created: boolean }> {
   const { tx, now } = ctx;
   const existing = await tx.weeklyBasket.findUnique({
@@ -171,6 +174,8 @@ export async function draftBasketForShop(
     }),
     dedupeKey: `basket.ready:${basketId}`,
   });
+  // On the weekly job, the owner's auto-approve rule may approve and pay this basket now.
+  if (opts.autoApprove) await evaluateAutoApprove(ctx, basketId);
   return { basketId, created: true };
 }
 
@@ -213,7 +218,7 @@ export async function draftWeeklyBaskets(
   for (const id of due.shopIds) {
     try {
       const res = await withTransaction(deps, caller, (ctx) =>
-        draftBasketForShop(ctx, id, due.week),
+        draftBasketForShop(ctx, id, due.week, { autoApprove: true }),
       );
       if (res.created) drafted += 1;
     } catch (error) {

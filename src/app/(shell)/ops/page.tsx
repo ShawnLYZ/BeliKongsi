@@ -18,7 +18,7 @@ export default async function OpsHomePage() {
         <h1 className="text-2xl font-bold">Approvals</h1>
         <p className="mt-1 text-base">
           Nothing consequential happens without you: approve each supplier order against its
-          evidence, and review each claim with its photos.
+          evidence, review each claim with its photos, and check each deletion request.
         </p>
       </div>
       <OpsInbox key={items.map((i) => i.id).join()} initialItems={items} />

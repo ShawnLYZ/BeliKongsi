@@ -6,8 +6,9 @@ import type {
   MonthlySavingsItemView,
   MonthlySavingsView,
   SavingsView,
+  TimeSavedView,
 } from '@/lib/views/savings';
-import { mytInstant, mytParts } from '@/lib/time';
+import { isoWeekOf, isoWeekStart, mytInstant, mytParts } from '@/lib/time';
 import { participationSavings, percentSaved, type SavingsResult } from '@/server/engine';
 import { resolveClock } from '@/server/adapters/clock';
 import { listPendingApprovals } from '@/server/modules/approvals/approvals';
@@ -109,6 +110,71 @@ function monthOf(now: Date): string {
 }
 
 /**
+ * The month's time-saved estimate (PRD §27, story 90). The weeks are the shop's paid baskets whose
+ * ISO week starts (Monday, Malaysia time) in the month. A week is measured from first opening the
+ * basket (C11) to its successful payment, rounded up to whole minutes. A basket paid with no
+ * person behind the payment (auto-approval, with a mandate or from the balance alone) is 0: the
+ * owner spent no time. The estimate is the old routine less that, never below zero.
+ */
+async function timeSavedFor(
+  prisma: PrismaClient,
+  shopId: string,
+  range: { from: Date; to: Date },
+): Promise<TimeSavedView> {
+  const shop = await prisma.shop.findUniqueOrThrow({
+    where: { id: shopId },
+    select: { oldMinutesPerWeek: true },
+  });
+  const old = shop.oldMinutesPerWeek;
+  if (old === null)
+    return { oldMinutesPerWeek: null, weeks: [], totalSavedMinutes: 0, label: 'estimate' };
+
+  const baskets = await prisma.weeklyBasket.findMany({
+    where: {
+      shopId,
+      status: 'paid',
+      basketWeek: {
+        gte: isoWeekOf(range.from),
+        lte: isoWeekOf(new Date(range.to.getTime() - 1)),
+      },
+    },
+    orderBy: { basketWeek: 'asc' },
+  });
+  const inMonth = baskets.filter((b) => {
+    const start = isoWeekStart(b.basketWeek).getTime();
+    return start >= range.from.getTime() && start < range.to.getTime();
+  });
+  const payments = await prisma.payment.findMany({
+    where: { basketId: { in: inMonth.map((b) => b.id) }, status: 'succeeded' },
+    orderBy: [{ completedAt: 'desc' }, { id: 'desc' }],
+  });
+  const weeks = [];
+  for (const basket of inMonth) {
+    const paid = payments.find((p) => p.basketId === basket.id);
+    if (!paid?.completedAt) continue;
+    const auto = paid.createdByUserId === null;
+    const measuredMinutes =
+      auto || !basket.firstOpenedAt
+        ? 0
+        : Math.max(
+            0,
+            Math.ceil((paid.completedAt.getTime() - basket.firstOpenedAt.getTime()) / 60_000),
+          );
+    weeks.push({
+      week: basket.basketWeek,
+      measuredMinutes,
+      savedMinutes: Math.max(0, old - measuredMinutes),
+    });
+  }
+  return {
+    oldMinutesPerWeek: old,
+    weeks,
+    totalSavedMinutes: weeks.reduce((sum, w) => sum + w.savedMinutes, 0),
+    label: 'estimate',
+  };
+}
+
+/**
  * A shop's month (PRD §6.10, stories 84-87). Verified savings are those of checks submitted in the
  * month less the delivery fees of the door pickups checked in it; estimated savings are the kept
  * lines of rounds closed in the month that are not checked yet. Owner only. Without `month` it
@@ -132,6 +198,7 @@ export async function monthlySavings(
   const { prisma } = deps;
   const include = { round: { include: { product: true } } };
 
+  const timeSaved = await timeSavedFor(prisma, shopId, { from, to });
   const [checkedLines, closedRows, hubRows, refunds, checks] = await Promise.all([
     prisma.deliveryCheckLine.findMany({
       where: { deliveryCheck: { submittedAt: inMonth, pickup: { shopId } } },
@@ -222,6 +289,7 @@ export async function monthlySavings(
       basis,
       savingSen,
     })),
+    timeSaved,
   };
 }
 

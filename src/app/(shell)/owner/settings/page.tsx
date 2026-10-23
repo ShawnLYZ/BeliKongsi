@@ -1,5 +1,9 @@
 import type { ShopSettingsView } from '@/lib/views/directory';
 import { FulfilmentPicker } from '@/components/fulfilment/fulfilment-picker';
+import { AutoApproveCard } from '@/components/settings/auto-approve-card';
+import { TimeSavedForm } from '@/components/settings/time-saved-form';
+import { YourDataCard } from '@/components/settings/your-data-card';
+import { getAutoApproveRule } from '@/server/modules/baskets/auto-approve';
 import { getShopSettings, listPickupPointsForShop } from '@/server/modules/directory/directory';
 import { personCaller } from '@/server/platform/caller';
 import { getDeps } from '@/server/platform/deps';
@@ -12,9 +16,10 @@ export default async function OwnerSettingsPage() {
   const deps = getDeps();
   scheduleDueWork(deps);
   const caller = personCaller(session);
-  const [settings, points] = await Promise.all([
+  const [settings, points, rule] = await Promise.all([
     getShopSettings(deps, caller, shopId) as Promise<ShopSettingsView>,
     listPickupPointsForShop(deps, caller),
+    getAutoApproveRule(deps, caller, shopId),
   ]);
   return (
     <div className="flex flex-col gap-4">
@@ -26,6 +31,9 @@ export default async function OwnerSettingsPage() {
         </p>
       </div>
       <FulfilmentPicker shopId={shopId} settings={settings} points={points} submitLabel="Save" />
+      <AutoApproveCard shopId={shopId} initial={rule} />
+      <TimeSavedForm shopId={shopId} settings={settings} />
+      <YourDataCard shopId={shopId} />
     </div>
   );
 }

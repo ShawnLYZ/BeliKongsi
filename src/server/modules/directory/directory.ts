@@ -14,8 +14,10 @@ import { withTransaction } from '@/server/platform/tx';
 import { appendLog } from '../activity/log';
 import { isStaff } from '../rounds/read';
 
+/** `oldMinutesPerWeek` (integer 0 to 600) is what ordering used to take; omitted keeps the saved figure. */
 export type SettingsInput =
-  { defaultFulfilment: 'pickup'; pickupPointId: string } | { defaultFulfilment: 'door' };
+  | { defaultFulfilment: 'pickup'; pickupPointId: string; oldMinutesPerWeek?: number }
+  | { defaultFulfilment: 'door'; oldMinutesPerWeek?: number };
 
 const DOOR_TOO_FAR_MESSAGE =
   "Your shop is more than 20 km from the nearest pickup point, so door delivery isn't available. Choose a pickup point instead.";
@@ -84,6 +86,7 @@ function settingsView(
       available: fee.feeSen !== null,
     },
     setupCompleted: shop.setupCompletedAt !== null,
+    oldMinutesPerWeek: shop.oldMinutesPerWeek,
   };
   if (!isStaff(caller)) return view;
   const { feeSen: _feeSen, ...door } = view.door;
@@ -146,6 +149,9 @@ export async function updateShopSettings(
       data: {
         defaultFulfilment: input.defaultFulfilment,
         defaultPickupPointId: pickupPointId,
+        ...(input.oldMinutesPerWeek !== undefined
+          ? { oldMinutesPerWeek: input.oldMinutesPerWeek }
+          : {}),
         ...(completing ? { setupCompletedAt: ctx.now } : {}),
       },
     });
@@ -157,8 +163,13 @@ export async function updateShopSettings(
       before: {
         defaultFulfilment: shop.defaultFulfilment,
         pickupPointId: shop.defaultPickupPointId,
+        oldMinutesPerWeek: shop.oldMinutesPerWeek,
       },
-      after: { defaultFulfilment: input.defaultFulfilment, pickupPointId },
+      after: {
+        defaultFulfilment: input.defaultFulfilment,
+        pickupPointId,
+        oldMinutesPerWeek: updated.oldMinutesPerWeek,
+      },
     });
     if (completing) {
       await appendLog(ctx, {

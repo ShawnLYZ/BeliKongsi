@@ -1,14 +1,19 @@
 import type { BalanceView, MoneyHistoryItem, PaymentView, ReceiptView } from '@/lib/views/payments';
-import { balanceOf } from '@/server/modules/ledger/accounts';
+import { resolveClock } from '@/server/adapters/clock';
 import type { Caller } from '@/server/platform/caller';
 import type { AppDeps } from '@/server/platform/deps';
 import { conflict, notFound } from '@/server/platform/errors';
 import { UUID } from '@/server/platform/ids';
 import { toPage } from '@/server/platform/pagination';
 import { requireShopAccess } from '@/server/platform/permissions';
+import { availableBalance } from './available';
 import { paymentView } from './simulate';
 
-const METHOD_LABEL = { duitnow_qr: 'DuitNow QR', fpx: 'FPX online banking' } as const;
+const METHOD_LABEL = {
+  duitnow_qr: 'DuitNow QR',
+  fpx: 'FPX online banking',
+  auto_debit: 'DuitNow AutoDebit',
+} as const;
 
 async function findPayment(deps: AppDeps, caller: Caller, paymentId: string) {
   if (!UUID.test(paymentId)) throw notFound('Payment');
@@ -106,8 +111,9 @@ export async function getBalanceView(
     throw notFound('Shop');
   }
   const key = `shop_balance:${shopId}`;
-  const [balanceSen, postings, payments] = await Promise.all([
-    balanceOf(db, { kind: 'shop_balance', shopId }),
+  const now = (await resolveClock(deps)).now();
+  const [{ balanceSen, availableSen }, postings, payments] = await Promise.all([
+    availableBalance(db, shopId, now),
     db.ledgerPosting.findMany({
       where: { OR: [{ fromAccount: { key } }, { toAccount: { key } }] },
       include: { fromAccount: { select: { key: true } } },
@@ -156,6 +162,22 @@ export async function getBalanceView(
   const usedByPayment = new Map<string, Entry>();
   for (const x of postings) {
     const at = x.occurredAt.toISOString();
+    if (x.fromAccount.key === key && x.kind === 'withdrawal') {
+      entries.push({
+        id: `w:${x.id}`,
+        seq: x.seq,
+        item: {
+          at,
+          kind: 'withdrawal',
+          label: 'Withdrawal (simulated)',
+          amountSen: x.amountSen,
+          balanceChangeSen: -x.amountSen,
+          // The receipt: the payments partner's reference, kept as the posting memo.
+          reason: x.memo ? `Reference ${x.memo}` : null,
+        },
+      });
+      continue;
+    }
     if (x.fromAccount.key === key) {
       // Balance used: one item per payment, however many lines it was spread over.
       const groupId = x.paymentId ?? x.id;
@@ -251,9 +273,13 @@ export async function getBalanceView(
   if (page.cursor !== null) {
     const at = newestFirst.findIndex((e) => e.id === page.cursor);
     // Like the activity log, a cursor that is not ours gives an empty page.
-    if (at < 0) return { balanceSen, history: { items: [], nextCursor: null } };
+    if (at < 0) return { balanceSen, availableSen, history: { items: [], nextCursor: null } };
     start = at + 1;
   }
   const p = toPage(newestFirst.slice(start, start + page.limit + 1), page.limit, (e) => e.id);
-  return { balanceSen, history: { items: p.items.map((e) => e.item), nextCursor: p.nextCursor } };
+  return {
+    balanceSen,
+    availableSen,
+    history: { items: p.items.map((e) => e.item), nextCursor: p.nextCursor },
+  };
 }

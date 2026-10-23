@@ -127,6 +127,7 @@ enum PaymentMethod {
   duitnow_qr
   fpx
   balance_only
+  auto_debit
 }
 
 enum PaymentStatus {
@@ -170,6 +171,7 @@ enum PostingKind {
   supplier_payout
   delivery_fee_to_partner
   refund_claim
+  withdrawal
 }
 
 enum SupplierOrderStatus {
@@ -222,6 +224,7 @@ enum ApprovalType {
   supplier_order
   supplier_confirmation
   claim
+  data_deletion
 }
 
 enum ApprovalStatus {
@@ -284,7 +287,7 @@ model PickupPoint {
 }
 
 model Shop {
-  id                   String          @id @default(uuid()) @db.Uuid
+  id                   String           @id @default(uuid()) @db.Uuid
   name                 String
   type                 ShopType
   address              String
@@ -292,14 +295,18 @@ model Shop {
   postcode             String
   lat                  Float
   lng                  Float
-  defaultFulfilment    Fulfilment      @map("default_fulfilment")
-  defaultPickupPointId String?         @map("default_pickup_point_id") @db.Uuid
-  defaultPickupPoint   PickupPoint?    @relation(fields: [defaultPickupPointId], references: [id])
-  isBackground         Boolean         @map("is_background")
-  setupCompletedAt     DateTime?       @map("setup_completed_at") @db.Timestamptz
-  createdAt            DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  defaultFulfilment    Fulfilment       @map("default_fulfilment")
+  defaultPickupPointId String?          @map("default_pickup_point_id") @db.Uuid
+  defaultPickupPoint   PickupPoint?     @relation(fields: [defaultPickupPointId], references: [id])
+  isBackground         Boolean          @map("is_background")
+  setupCompletedAt     DateTime?        @map("setup_completed_at") @db.Timestamptz
+  createdAt            DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  oldMinutesPerWeek    Int?             @map("old_minutes_per_week")
+  anonymisedAt         DateTime?        @map("anonymised_at") @db.Timestamptz
   memberships          Membership[]
   usualList            UsualList?
+  autoApproveRule      AutoApproveRule?
+  withdrawals          Withdrawal[]
   baskets              WeeklyBasket[]
   payments             Payment[]
   participations       Participation[]
@@ -757,6 +764,8 @@ model Photo {
   uploadedAt          DateTime           @map("uploaded_at") @db.Timestamptz
   deleteAfter         DateTime           @map("delete_after") @db.Timestamptz
   deletedAt           DateTime?          @map("deleted_at") @db.Timestamptz
+  /// When the stored file was removed (or found missing) after the row was marked deleted.
+  storagePurgedAt     DateTime?          @map("storage_purged_at") @db.Timestamptz
 
   @@map("photos")
 }
@@ -925,4 +934,31 @@ model RateLimitHit {
 
   @@index([bucket, at])
   @@map("rate_limit_hits")
+}
+
+model AutoApproveRule {
+  id                String    @id @default(uuid()) @db.Uuid
+  shopId            String    @unique @map("shop_id") @db.Uuid
+  shop              Shop      @relation(fields: [shopId], references: [id])
+  enabled           Boolean
+  capSen            Int       @default(50000) @map("cap_sen")
+  requireBelowUsual Boolean   @default(true) @map("require_below_usual")
+  /// The simulated AutoDebit mandate's reference; no bank details are ever stored.
+  mandateReference  String?   @map("mandate_reference")
+  mandateAgreedAt   DateTime? @map("mandate_agreed_at") @db.Timestamptz
+  updatedAt         DateTime  @map("updated_at") @db.Timestamptz
+
+  @@map("auto_approve_rules")
+}
+
+model Withdrawal {
+  id               String   @id @default(uuid()) @db.Uuid
+  shopId           String   @map("shop_id") @db.Uuid
+  shop             Shop     @relation(fields: [shopId], references: [id])
+  amountSen        Int      @map("amount_sen")
+  partnerReference String   @map("partner_reference")
+  createdAt        DateTime @map("created_at") @db.Timestamptz
+
+  @@index([shopId])
+  @@map("withdrawals")
 }

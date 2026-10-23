@@ -41,6 +41,29 @@ export const TEMPLATES = defineTemplates({
       whatsappText: `Your Kongsi basket for this week is ready: ${items}, ${formatRM(data.nowSen)} now, about ${formatRM(data.afterCutoffSen)} after cut-off. Approve by ${formatMytShort(data.deadline)}.`,
     });
   },
+  // Owner only: the auto-approve rule approved and paid the basket (balance first, then the mandate).
+  // How it was paid follows the split: all by AutoDebit, balance and AutoDebit, or balance alone.
+  'basket.auto_approved': (data: {
+    itemCount: number;
+    totalSen: number;
+    balanceAppliedSen: number;
+    externalSen: number;
+    deadline: Date;
+  }) => {
+    const items = `${data.itemCount} ${data.itemCount === 1 ? 'item' : 'items'}`;
+    const paid =
+      data.balanceAppliedSen === 0
+        ? 'paid by DuitNow AutoDebit (simulated)'
+        : data.externalSen === 0
+          ? 'paid from your balance'
+          : `paid — ${formatRM(data.balanceAppliedSen)} from your balance and ${formatRM(data.externalSen)} by DuitNow AutoDebit (simulated)`;
+    const text = `Your basket was approved automatically: ${items}, ${formatRM(data.totalSen)} ${paid}. You can still cancel any item before ${formatMytShort(data.deadline)}.`;
+    return () => ({ title: 'Basket approved automatically', body: text, whatsappText: text });
+  },
+  'basket.auto_approve_failed': (data: { deadline: Date }) => {
+    const text = `Automatic payment failed (simulated). Please approve and pay your basket by ${formatMytShort(data.deadline)}.`;
+    return () => ({ title: 'Automatic payment failed', body: text, whatsappText: text });
+  },
   // Sent to the owner when staff add to the basket; carries no amount.
   'basket.staff_added': (data: {
     staffName: string;
@@ -61,6 +84,11 @@ export const TEMPLATES = defineTemplates({
         ? `Payment received (simulated). You're in the ${data.shortName} Kongsi.`
         : `Payment received (simulated). You're in ${data.roundCount} Kongsi ${data.roundCount === 1 ? 'round' : 'rounds'} this week.`;
     return () => ({ title: 'Payment received', body: text, whatsappText: text });
+  },
+  // Owner only: the balance was sent to the shop's bank account through the partner (simulated).
+  'balance.withdrawn': (data: { amountSen: number; reference: string }) => {
+    const text = `Withdrawal sent (simulated): ${formatRM(data.amountSen)} to the bank account registered with the payments partner. Reference ${data.reference}.`;
+    return () => ({ title: 'Withdrawal sent', body: text, whatsappText: text });
   },
   // Owner only: a line cancelled before cut-off, with everything that went back to the balance.
   'participation.cancelled': (data: {
@@ -267,5 +295,30 @@ export const TEMPLATES = defineTemplates({
   'ops.claim_needed': (data: { shopName: string; totalSen: number }) => {
     const text = `Claim awaiting decision: ${data.shopName}, ${formatRM(data.totalSen)}.`;
     return () => ({ title: 'Claim awaiting decision', body: text, whatsappText: text });
+  },
+  // Owner only: Ops did not approve the deletion request. An approval deletes the owner's notices.
+  'deletion.decided': (data: { reason: string }) => {
+    const reason = data.reason.trim().replace(/[\s.,;:!?]+$/, '');
+    const prefix = 'Your data deletion request was not approved: ';
+    const room = 300 - prefix.length - 1;
+    const short =
+      reason.length > room ? `${reason.slice(0, Math.max(room, 1) - 1).trimEnd()}…` : reason;
+    return () => ({
+      title: 'Deletion request not approved',
+      body: `${prefix}${reason}.`,
+      whatsappText: `${prefix}${short}.`,
+    });
+  },
+  // Owner only: last month's verified figures, sent from 09:00 on the 1st.
+  'savings.monthly_summary': (data: {
+    monthName: string;
+    roundsJoined: number;
+    unitsBought: number;
+    refundsSen: number;
+    feesSen: number;
+    verifiedSen: number;
+  }) => {
+    const text = `Your BeliKongsi summary for ${data.monthName}: ${data.roundsJoined} rounds, ${data.unitsBought} units, ${formatRM(data.refundsSen)} refunded, ${formatRM(data.feesSen)} in fees, ${formatRM(data.verifiedSen)} verified savings.`;
+    return () => ({ title: `Your ${data.monthName} summary`, body: text, whatsappText: text });
   },
 });

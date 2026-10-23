@@ -23,6 +23,25 @@ export interface MonthlySavingsItemView {
   savingSen: number;
 }
 
+/** One paid business week's estimate of the owner's time saved. */
+export interface TimeSavedWeekView {
+  /** ISO week, `YYYY-Www`. */
+  week: string;
+  /** Minutes from first opening the basket to paying, rounded up; 0 when approved automatically. */
+  measuredMinutes: number;
+  /** The old routine less `measuredMinutes`, never below zero. */
+  savedMinutes: number;
+}
+
+/** The owner's time saved in a month: always an estimate, from a self-reported old routine. */
+export interface TimeSavedView {
+  /** Minutes a week ordering used to take, as the owner entered it; null until entered. */
+  oldMinutesPerWeek: number | null;
+  weeks: TimeSavedWeekView[];
+  totalSavedMinutes: number;
+  label: 'estimate';
+}
+
 /** One calendar month in Malaysia time, as the owner's savings screen shows it. */
 export interface MonthlySavingsView {
   /** `YYYY-MM`. */
@@ -39,4 +58,5 @@ export interface MonthlySavingsView {
   /** Verified savings against usual prices, as a percentage with one decimal; null with none. */
   percentSaved: number | null;
   items: MonthlySavingsItemView[];
+  timeSaved: TimeSavedView;
 }

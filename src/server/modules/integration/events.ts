@@ -28,7 +28,8 @@ export type EventType =
   | 'pickup.collected'
   | 'delivery.checked'
   | 'claim.submitted'
-  | 'claim.decided';
+  | 'claim.decided'
+  | 'balance.withdrawn';
 
 const FORBIDDEN_KEY = /name|phone|email|address/i;
 

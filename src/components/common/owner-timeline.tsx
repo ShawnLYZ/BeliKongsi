@@ -24,6 +24,12 @@ const OWNER_LABELS: Record<string, string> = {
   'claim.submitted': 'Claim opened',
   'claim.approved': 'Claim approved',
   'claim.rejected': 'Claim not approved',
+  'auto_approve.enabled': 'Auto-approve switched on',
+  'auto_approve.disabled': 'Auto-approve switched off',
+  'balance.withdrawn': 'Balance withdrawn',
+  'data.exported': 'Data exported',
+  'data.deletion_requested': 'Data deletion requested',
+  'shop.anonymised': 'Shop data anonymised',
 };
 
 const record = (v: unknown): Record<string, unknown> =>

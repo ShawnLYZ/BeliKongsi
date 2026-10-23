@@ -1,5 +1,5 @@
 export type PaymentStatusView = 'pending' | 'succeeded' | 'failed' | 'voided';
-export type PaymentMethodView = 'duitnow_qr' | 'fpx' | 'balance_only';
+export type PaymentMethodView = 'duitnow_qr' | 'fpx' | 'balance_only' | 'auto_debit';
 
 /** What approving a basket or joining a round returns: the amounts and where to pay. */
 export interface PaymentSummary {
@@ -51,7 +51,8 @@ export interface ReceiptView {
   notice: 'Issued by BeliKongsi (simulated). Not a tax invoice.';
 }
 
-export type MoneyHistoryKind = 'payment' | 'balance_used' | 'refund' | 'claim_refund';
+export type MoneyHistoryKind =
+  'payment' | 'balance_used' | 'refund' | 'claim_refund' | 'withdrawal';
 
 /** One line of a shop's money history. `runningBalanceSen` is the shop balance after the item. */
 export interface MoneyHistoryItem {
@@ -69,5 +70,7 @@ export interface MoneyHistoryItem {
 
 export interface BalanceView {
   balanceSen: number;
+  /** What can be withdrawn now: the balance less what pending payments plan to use. */
+  availableSen: number;
   history: { items: MoneyHistoryItem[]; nextCursor: string | null };
 }

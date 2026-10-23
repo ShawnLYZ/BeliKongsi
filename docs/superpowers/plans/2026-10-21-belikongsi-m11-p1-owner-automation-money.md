@@ -68,10 +68,15 @@
     - `Shop` += `oldMinutesPerWeek Int?`, `anonymisedAt DateTime?`
     - model `Withdrawal` (`withdrawals`): id, shopId, amountSen, partnerReference, createdAt
     - The migration ends with `SELECT bk_secure_all_tables();`.
-  - `src/server/adapters/payments.ts`: `createMandate(shopId): Promise<{ reference }>`, `autoDebit({ mandateReference, amountSen, paymentId }): Promise<{ reference }>`, `withdraw({ shopId, amountSen }): Promise<{ reference }>`. Reference prefixes: `SIM-MANDATE-`, `SIM-DEBIT-`, `SIM-WD-`.
-  - `src/server/modules/baskets/draft.ts`: call `evaluateAutoApprove(ctx, basketId)` after drafting.
-  - `src/server/modules/activity/actions.ts`: the new codes.
-  - `src/server/modules/notifications/templates.ts`: `basket.auto_approved`, `basket.auto_approve_failed`.
+  - `src/server/adapters/payments.ts`: the interface `PaymentsPartner` has `startCheckout({ paymentId, amountSen })` and `payout({ supplierOrderId, supplierId, amountSen })`, each returning `Promise<{ reference: string }>`; `simulatedPayments` is the only implementation and is `deps.payments` in the tests (a plain property of `AppDeps`, so a test can swap in `{ ...simulatedPayments, autoDebit: async () => { throw new Error('declined'); } }`). Add `createMandate(shopId): Promise<{ reference }>`, `autoDebit({ mandateReference, amountSen, paymentId }): Promise<{ reference }>`, `withdraw({ shopId, amountSen }): Promise<{ reference }>`. Reference prefixes: `SIM-MANDATE-`, `SIM-DEBIT-`, `SIM-WD-`.
+  - `src/server/modules/baskets/draft.ts`: `draftBasketForShop(ctx, shopId, basketWeek)` returns `{ basketId: string | null; created: boolean }`. After its `basket.ready` notice, when `created` is true, call `evaluateAutoApprove(ctx, basketId)` in the same transaction. `draftWeeklyBaskets(deps, opts?)` returns `{ drafted, failed }` and needs no change.
+  - `src/server/modules/payments/create.ts`: `CreatePaymentInput.settleImmediatelyWith` is `'duitnow_qr' | 'fpx'` today (its comment already names M11 AutoDebit); widen it to include `'auto_debit'`. When it is `'auto_debit'` and `externalSen > 0`, call `deps.payments.autoDebit({ mandateReference, amountSen: externalSen, paymentId })` instead of `startCheckout` and store the returned reference as `partnerReference`; add `mandateReference?: string` and `reason?: string` to the input and pass `reason` on to `settlePayment`.
+  - `src/server/modules/payments/complete.ts`: `settlePayment(ctx, paymentId, method, source?)` is where `basket.approved` is logged (there is no other site, and `approveBasket` does not log it). Add an optional `reason` (an options object) that is written on that log entry. The actor is already `system` under a system caller. `completePaymentSuccess(ctx, paymentId, method: PaymentMethod): Promise<void>` just calls `settlePayment`.
+  - `src/server/modules/payments/views.ts`: `METHOD_LABEL` is `{ duitnow_qr, fpx }` keyed by the method; add `auto_debit: 'DuitNow AutoDebit'` (the payment row in the money history would otherwise have no label). Also check the other `PaymentMethod` users: `src/lib/views/payments.ts`, `payments/simulate.ts`, `components/checkout/checkout-screen.tsx`, `components/checkout/receipt-view.tsx`.
+  - `src/server/modules/activity/actions.ts`: append the new codes to `ACTIONS` (an `as const` array; `ActionCode` derives from it; the last entry today is `log.verified`).
+  - `src/components/common/owner-timeline.tsx`: add owner-facing labels for the new codes (its label map has `basket.approved`, `refund.issued` and so on).
+  - `src/server/modules/notifications/templates.ts`: `basket.auto_approved`, `basket.auto_approve_failed`. Add them to `TEMPLATES` in the existing style: `'type': (data: {...}) => (role) => ({ title, body, whatsappText })`. `formatMytShort(d: Date)` (`src/lib/format.ts:22`) gives `Thu 8 pm`.
+  - `tests/api/helpers/scenarios.ts`: add `paymentOfBasket(shopKey, week?)`; it does not exist. `basketOf(shopKey, week)`, `lastWhatsapp(userKey, type, contains?)` and `seedId` (import from `prisma/seed/ids`, as `scenarios.ts` does) exist.
 - Test: `tests/api/auto-approve.test.ts`
 
 **Interfaces:**
@@ -82,7 +87,7 @@
     - Enabling without a mandate needs `agreeToMandate: true`; otherwise 422 `MANDATE_REQUIRED`.
     - It logs `auto_approve.enabled` or `auto_approve.disabled` with before and after.
   - `evaluateAutoApprove(ctx, basketId): Promise<'approved' | 'not_eligible' | 'debit_failed'>`:
-    - **Approved:** the payment goes through `createPayment(..., settleImmediatelyWith: 'auto_debit')`, with the balance first and the remainder by `autoDebit`. It logs `basket.approved` as actor system with reason `Auto-approve rule: total within {RM cap} and every item below your usual price`. Owner notice: `Your basket was approved automatically: {n} items, {RM total} paid by DuitNow AutoDebit (simulated). You can still cancel any item before {formatMytShort(deadline)}.`
+    - **Approved:** the payment goes through `createPayment(..., settleImmediatelyWith: 'auto_debit')`, with the balance first and the remainder by `autoDebit`. It logs `basket.approved` (inside `settlePayment`, see the `complete.ts` note above) as actor system with reason `Auto-approve rule: total within {RM cap} and every item below your usual price`. Owner notice: `Your basket was approved automatically: {n} items, {RM total} paid by DuitNow AutoDebit (simulated). You can still cancel any item before {formatMytShort(deadline)}.`
     - **Debit failed:** the basket stays a draft. Owner notice: `Automatic payment failed (simulated). Please approve and pay your basket by {formatMytShort(deadline)}.`
     - **Not eligible:** nothing extra happens; the usual `basket.ready` notice stands.
 
@@ -135,7 +140,12 @@ it('logs switching off and every auto-approval (story 41)', async () => {
 **Files:**
 
 - Create: `src/server/modules/payments/withdraw.ts`, `src/app/api/shops/[shopId]/balance/withdraw/route.ts`
-- Modify: `src/server/modules/payments/views.ts` (money history kind `withdrawal`), `src/server/modules/notifications/templates.ts` (`balance.withdrawn`)
+- Modify:
+  - `src/lib/views/payments.ts`: `MoneyHistoryKind` is `'payment' | 'balance_used' | 'refund' | 'claim_refund'`; add `'withdrawal'`. A `MoneyHistoryItem` is `{ at, kind, label, amountSen (always positive), balanceChangeSen (signed), runningBalanceSen, reason: string | null }`.
+  - `src/server/modules/payments/views.ts`: in `getBalanceView(deps, caller, shopId, page: { cursor, limit })` every posting leaving `shop_balance` is currently grouped as "Balance used for ..." (`kind: 'balance_used'`). Branch on `x.kind === 'withdrawal'` before that: one item per posting, `kind: 'withdrawal'`, label `Withdrawal (simulated)`, `amountSen` = posting amount, `balanceChangeSen` = `-amount`.
+  - `src/server/modules/integration/events.ts`: `EventType` (a string-literal union, PRD §21) gets `'balance.withdrawn'`; emit with `emitEvent(ctx, type, data)`. Its data keys must not match `/name|phone|email|address/i`.
+  - `src/server/modules/activity/actions.ts` and `src/components/common/owner-timeline.tsx` for the code `balance.withdrawn`.
+  - `src/server/modules/notifications/templates.ts` (`balance.withdrawn`)
 - Test: `tests/api/withdraw.test.ts`
 
 **Interfaces:**
@@ -171,7 +181,7 @@ it('shows the withdrawal in the money history', async () => {
 **Files:**
 
 - Create: `src/server/modules/savings/monthly-summary.ts`
-- Modify: `src/server/modules/jobs/run.ts` (add `sendMonthlySummaries`), `src/server/modules/notifications/templates.ts` (`savings.monthly_summary`)
+- Modify: `src/server/modules/jobs/run.ts` (`runDueJobs(deps: AppDeps): Promise<JobsReport>`; `JobsReport` is `{ openedRounds, draftedBaskets, reminders, voidedPayments, closedRounds, failedRounds, expiredBaskets }`; add `sendMonthlySummaries` as the last step with a `monthlySummaries: number` field, and update any test that asserts the whole report), `src/server/modules/notifications/templates.ts` (`savings.monthly_summary`)
 - Test: `tests/api/monthly-summary.test.ts`
 
 **Interfaces:**
@@ -210,7 +220,11 @@ it('waits until 09:00 Malaysia time', async () => {
 
 **Files:**
 
-- Modify: `src/server/modules/directory/directory.ts` (settings accept `oldMinutesPerWeek`, 0–600), `src/server/modules/savings/savings.ts` (`timeSaved`), `src/lib/views/savings.ts`
+- Modify:
+  - `src/server/modules/directory/directory.ts`: `updateShopSettings(deps, caller, shopId, input: SettingsInput)` where `SettingsInput` is `{ defaultFulfilment: 'pickup'; pickupPointId: string } | { defaultFulfilment: 'door' }`. Add an optional `oldMinutesPerWeek?: number` (integer 0–600) to both members; write it to `Shop.oldMinutesPerWeek` and include it in the `shop.settings_changed` before and after.
+  - `src/app/api/shops/[shopId]/settings/route.ts`: its zod `discriminatedUnion('defaultFulfilment', ...)` body must accept the same optional `oldMinutesPerWeek`. Fulfilment stays required, so a request with only `oldMinutesPerWeek` is a 400 (the test below sends the shop's fulfilment with it).
+  - `src/server/modules/savings/savings.ts`: `monthlySavings(deps, caller, shopId, month?: string): Promise<MonthlySavingsView>` (owner only) gets `timeSaved`.
+  - `src/lib/views/savings.ts`: `MonthlySavingsView` is today `{ month, roundsJoined, unitsBought, refundsSen, feesPaidSen, deliveryFeesSen, verifiedSavingsSen, estimatedSavingsSen, percentSaved, items }`.
 - Test: `tests/api/time-saved.test.ts`
 
 **Interfaces:**
@@ -223,7 +237,11 @@ it('waits until 09:00 Malaysia time', async () => {
 
 ```ts
 it('estimates time saved from the old routine minus measured approval time (story 90)', async () => {
-  await ah.patch(`/api/shops/${KEDAI}/settings`, { oldMinutesPerWeek: 45 });
+  await ah.patch(`/api/shops/${KEDAI}/settings`, {
+    defaultFulfilment: 'pickup',
+    pickupPointId: seedId('pickup_point', 'PP_IPOH'),
+    oldMinutesPerWeek: 45,
+  });
   // first opened 06:10, paid 06:13 → measured 3 → saved 42
   const t = (await ah.get(`/api/shops/${KEDAI}/savings?month=2026-11`)).body.timeSaved;
   expect(t).toMatchObject({ oldMinutesPerWeek: 45, totalSavedMinutes: 42, label: 'estimate' });
@@ -240,6 +258,10 @@ it('estimates time saved from the old routine minus measured approval time (stor
 **Files:**
 
 - Create: `src/server/modules/directory/export.ts`, `src/app/api/shops/[shopId]/export/route.ts`
+- Modify:
+  - `package.json`: add `fflate` (not installed yet).
+  - `tests/api/helpers/route.ts`: `callRoute` returns `{ status, body, headers }` and reads every response with `response.text()`, which corrupts a ZIP, and the test below uses `res.raw`. Read `response.arrayBuffer()` once, decode `body` from it, and return `raw: Uint8Array`. The `Client.get` wrapper in `tests/api/helpers/app.ts` passes the result through; widen its type if needed.
+  - The export builds `money-history.csv` from `getBalanceView(deps, caller, shopId, { cursor, limit })` (loop over every page) and `savings.csv` from `monthlySavings` (loop over the months with data).
 - Test: `tests/api/export.test.ts`
 
 **Interfaces:**
@@ -290,6 +312,7 @@ it("refuses another shop's export", async () => {
 **Files:**
 
 - Create: `src/server/modules/directory/deletion.ts`, `src/app/api/shops/[shopId]/deletion-request/route.ts`
+- Modify: `src/server/modules/approvals/approvals.ts`. A handler is registered with `registerApprovalHandler(type: ApprovalType, h: { onApprove(ctx, request, input: DecisionInput): Promise<void>; onReject(ctx, request, input): Promise<void> })` (line 53). The existing registrations are at the bottom of that file and call the other modules through arrow functions to avoid circular imports; do the same for `data_deletion`. `createApproval(ctx, { type, subjectType, subjectId, shopId?, assigneeRole, amountSen?, summary, whyNeeded, evidence, expiresAt? })` creates the request. `DecisionInput` is `{ decision, reason?, note?, expectedDispatchDate? }`.
 - Modify: `src/server/modules/notifications/templates.ts` (`deletion.decided`)
 - Test: `tests/api/deletion.test.ts`
 

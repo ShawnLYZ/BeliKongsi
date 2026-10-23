@@ -62,7 +62,7 @@ export async function createTestDeps(opts: { now?: string } = {}): Promise<{
   };
 }
 
-export type ClientResponse = { status: number; body: any; headers: Headers };
+export type ClientResponse = { status: number; body: any; headers: Headers; raw: Uint8Array };
 
 const ORIGIN = 'http://localhost';
 const COOKIE_NAME = 'bk_session';

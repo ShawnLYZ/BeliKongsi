@@ -6,6 +6,7 @@ export const METHOD_LABELS: Record<PaymentMethodView, string> = {
   duitnow_qr: 'DuitNow QR',
   fpx: 'FPX online banking',
   balance_only: 'BeliKongsi balance',
+  auto_debit: 'DuitNow AutoDebit',
 };
 
 /** A succeeded payment's receipt (PRD §8): every line, any delivery fee, balance used and paid. */

@@ -12,6 +12,12 @@ import { conflict, forbidden, notFound, unprocessable } from '@/server/platform/
 import { withTransaction, type TxContext } from '@/server/platform/tx';
 import { approvalLink } from './links';
 import { approveClaim, rejectClaim } from '../checks/claims';
+import {
+  approveDeletion,
+  liveDeletionEvidence,
+  purgeDeletedPhotos,
+  rejectDeletion,
+} from '../directory/deletion';
 import { skipDraftBasket } from '../baskets/lifecycle';
 import { approveSupplierOrder, rejectSupplierOrder } from '../supplier-orders/ops-decision';
 import {
@@ -31,6 +37,8 @@ export type DecisionInput = {
 export type ApprovalHandler = {
   onApprove(ctx: TxContext, request: ApprovalRequest, input: DecisionInput): Promise<void>;
   onReject(ctx: TxContext, request: ApprovalRequest, input: DecisionInput): Promise<void>;
+  /** For a pending request: the evidence as it stands now, shown in place of the stored one. */
+  liveEvidence?(db: Prisma.TransactionClient, request: ApprovalRequest): Promise<Json>;
 };
 
 export type ApprovalView = {
@@ -105,7 +113,7 @@ function visibility(caller: Caller): Prisma.ApprovalRequestWhereInput {
 }
 
 async function toViews(
-  db: Pick<Prisma.TransactionClient, 'user'>,
+  db: Prisma.TransactionClient,
   rows: ApprovalRequest[],
 ): Promise<ApprovalView[]> {
   const ids = [...new Set(rows.flatMap((r) => (r.proposedByUserId ? [r.proposedByUserId] : [])))];
@@ -116,6 +124,12 @@ async function toViews(
       })
     : [];
   const names = new Map(users.map((u) => [u.id, u.displayName]));
+  // A pending request whose evidence can go stale (a deletion's blockers) is shown as it is now.
+  const live = new Map<string, Json>();
+  for (const r of rows) {
+    const liveEvidence = r.status === 'pending' ? handlers.get(r.type)?.liveEvidence : undefined;
+    if (liveEvidence) live.set(r.id, await liveEvidence(db, r));
+  }
   return rows.map((r) => ({
     id: r.id,
     type: r.type,
@@ -124,7 +138,7 @@ async function toViews(
     summary: r.summary,
     whyNeeded: r.whyNeeded,
     amountSen: r.amountSen,
-    evidence: r.evidence,
+    evidence: (live.get(r.id) ?? r.evidence) as Prisma.JsonValue,
     proposedBy: {
       type: r.proposedByType,
       name: r.proposedByUserId ? (names.get(r.proposedByUserId) ?? null) : null,
@@ -160,7 +174,7 @@ export async function decideApproval(
   if (caller.kind !== 'person') throw forbidden();
   const { role } = caller.session.membership;
 
-  return withTransaction(deps, caller, async (ctx) => {
+  const view = await withTransaction(deps, caller, async (ctx) => {
     if (!UUID.test(id)) throw notFound('Approval request');
     const locked = await ctx.tx.$queryRaw<{ id: string }[]>`
       SELECT id FROM approval_requests WHERE id = ${id}::uuid FOR UPDATE`;
@@ -194,6 +208,11 @@ export async function decideApproval(
     });
     return (await toViews(ctx.tx, [updated]))[0]!;
   });
+  // Stored photo files go only after the deletion has committed.
+  if (view.type === 'data_deletion' && view.status === 'approved') {
+    await purgeDeletedPhotos(deps, view.subjectId);
+  }
+  return view;
 }
 
 // A weekly basket is approved by paying for it on the basket screen, never from the inbox; a
@@ -229,4 +248,13 @@ registerApprovalHandler('supplier_confirmation', {
 registerApprovalHandler('claim', {
   onApprove: (ctx, request) => approveClaim(ctx, request),
   onReject: (ctx, request, input) => rejectClaim(ctx, request, input),
+});
+
+// Ops approves a deletion once nothing is open and the balance is zero, which anonymises the shop;
+// a rejection gives the owner the reason. Arrow functions again, for the same circular import.
+// While pending, Ops sees the blockers recomputed now, not the ones stored at request time.
+registerApprovalHandler('data_deletion', {
+  onApprove: (ctx, request) => approveDeletion(ctx, request),
+  onReject: (ctx, request, input) => rejectDeletion(ctx, request, input),
+  liveEvidence: (db, request) => liveDeletionEvidence(db, request),
 });

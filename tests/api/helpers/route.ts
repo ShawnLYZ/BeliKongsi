@@ -60,7 +60,7 @@ export async function callRoute(
   method: string,
   path: string,
   init: { body?: unknown; headers?: Record<string, string>; routesDir?: string } = {},
-): Promise<{ status: number; body: any; headers: Headers }> {
+): Promise<{ status: number; body: any; headers: Headers; raw: Uint8Array }> {
   // Without routesDir, URLs are relative to src/app so src/app/api/health serves /api/health.
   const routes = buildRoutes(init.routesDir ?? 'src/app/api', init.routesDir ?? 'src/app');
 
@@ -79,7 +79,7 @@ export async function callRoute(
     }
   }
   if (!matched) {
-    return { status: 404, body: null, headers: new Headers() };
+    return { status: 404, body: null, headers: new Headers(), raw: new Uint8Array() };
   }
 
   const mod = (await import(/* @vite-ignore */ pathToFileURL(matched.file).href)) as Record<
@@ -88,7 +88,7 @@ export async function callRoute(
   >;
   const handler = mod[method.toUpperCase()];
   if (typeof handler !== 'function') {
-    return { status: 405, body: null, headers: new Headers() };
+    return { status: 405, body: null, headers: new Headers(), raw: new Uint8Array() };
   }
 
   const headers = new Headers(init.headers);
@@ -107,12 +107,14 @@ export async function callRoute(
     params: Promise.resolve(params),
   })) as Response;
 
-  const text = await response.text();
+  // Read the bytes once: decoding them as text first would corrupt a binary body such as a ZIP.
+  const raw = new Uint8Array(await response.arrayBuffer());
+  const text = new TextDecoder().decode(raw);
   let parsed: any = text;
   if (text === '') {
     parsed = null;
   } else if ((response.headers.get('content-type') ?? '').includes('json')) {
     parsed = JSON.parse(text);
   }
-  return { status: response.status, body: parsed, headers: response.headers };
+  return { status: response.status, body: parsed, headers: response.headers, raw };
 }

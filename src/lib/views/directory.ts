@@ -20,6 +20,8 @@ export interface ShopSettingsView {
     available: boolean;
   };
   setupCompleted: boolean;
+  /** Minutes a week ordering used to take, as the owner entered it; null until entered. */
+  oldMinutesPerWeek: number | null;
 }
 
 /** What staff see: whether door delivery is available, but no money (R6). */

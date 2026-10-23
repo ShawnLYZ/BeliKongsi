@@ -267,7 +267,8 @@ export async function saveUsualList(
       for (const entry of itemLogs) await appendLog(ctx, entry);
     }
 
-    // A shop that saves its list during an open week gets this week's basket straight away.
+    // A shop that saves its list during an open week gets this week's basket straight away, as a
+    // plain draft: the auto-approve rule runs only on the weekly job.
     await draftBasketForShop(ctx, shopId, isoWeekOf(now));
 
     const list = await tx.usualList.findUniqueOrThrow({

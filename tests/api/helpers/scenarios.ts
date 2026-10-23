@@ -56,6 +56,15 @@ export async function basketOf(shopKey: string, week: string) {
   return { ...basket, lines };
 }
 
+/** The latest payment of a shop's basket for an ISO week (the current week by default). */
+export async function paymentOfBasket(shopKey: string, week = '2026-W45') {
+  const basketId = (await basketIdOf(shopKey, week))!;
+  return getDeps().prisma.payment.findFirstOrThrow({
+    where: { basketId },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+  });
+}
+
 /**
  * The owner approves the basket and, unless the balance covered it, pays on the simulated
  * checkout with DuitNow QR. Returns the approval's summary with the final status.

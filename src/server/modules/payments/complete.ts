@@ -101,6 +101,7 @@ export async function settlePayment(
   paymentId: string,
   method: PaymentMethod,
   source?: ParticipationSource,
+  opts: { reason?: string } = {},
 ): Promise<void> {
   const { tx, now } = ctx;
   const p = await lockPayment(ctx, paymentId);
@@ -264,6 +265,7 @@ export async function settlePayment(
       subjectType: 'weekly_basket',
       subjectId: basket.id,
       scope: { shopId: p.shopId },
+      ...(opts.reason ? { reason: opts.reason } : {}),
       before: { status: 'payment_pending' },
       after: { status: 'paid', paymentId: p.id, lineCount: lines.length, amountSen: p.totalSen },
     });

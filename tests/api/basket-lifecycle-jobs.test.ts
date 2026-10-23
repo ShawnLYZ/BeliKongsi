@@ -190,7 +190,11 @@ describe('jobs runner', () => {
       (await callRoute('POST', '/api/jobs/run', { headers: { authorization: `Basic ${CRON}` } }))
         .status,
     ).toBe(401);
-    for (const method of ['GET', 'POST']) {
+    // The seed has October activity for two shops, so the first run sends their monthly summaries.
+    for (const [method, monthlySummaries] of [
+      ['GET', 2],
+      ['POST', 0],
+    ] as const) {
       const res = await callRoute(method, '/api/jobs/run', {
         headers: { authorization: `Bearer ${CRON}` },
       });
@@ -203,6 +207,7 @@ describe('jobs runner', () => {
         closedRounds: 0,
         failedRounds: 0,
         expiredBaskets: 0,
+        monthlySummaries,
       });
     }
   });
@@ -223,6 +228,7 @@ describe('jobs runner', () => {
       closedRounds: 0,
       failedRounds: 0,
       expiredBaskets: 0,
+      monthlySummaries: 0,
     });
   });
 });

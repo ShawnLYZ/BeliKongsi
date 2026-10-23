@@ -1,13 +1,14 @@
+import { randomUUID } from 'node:crypto';
 import type { ParticipationSource, Payment } from '@/generated/prisma/client';
 import type { PaymentSummary } from '@/lib/views/payments';
 import { appendLog } from '@/server/modules/activity/log';
 import { deliveryFeeDue } from '@/server/modules/baskets/amounts';
-import { balanceOf } from '@/server/modules/ledger/accounts';
 import { activeTotals, priceForShop, type DestinationInput } from '@/server/modules/rounds/quote';
 import { deliveryDateOf } from '@/server/modules/rounds/schedule';
 import { conflict, notFound } from '@/server/platform/errors';
 import { UUID } from '@/server/platform/ids';
 import type { TxContext } from '@/server/platform/tx';
+import { availableBalance } from './available';
 import { settlePayment } from './complete';
 import { lockRounds } from './fee';
 
@@ -29,9 +30,20 @@ export type CreatePaymentInput = {
   lines: PaymentLineInput[];
   deadlineAt: Date;
   source: ParticipationSource;
-  /** Completes at once without a checkout (the seed, and M11 AutoDebit). */
-  settleImmediatelyWith?: 'duitnow_qr' | 'fpx';
+  /** Completes at once without a checkout (the seed, and AutoDebit). */
+  settleImmediatelyWith?: 'duitnow_qr' | 'fpx' | 'auto_debit';
+  /** The AutoDebit mandate to take the outside money from; needed for `auto_debit`. */
+  mandateReference?: string;
+  /** Written on the `basket.approved` log entry when the payment settles a basket. */
+  reason?: string;
 };
+
+/** The bank declined the AutoDebit. Thrown before the payment is written, so nothing was saved. */
+export class AutoDebitDeclined extends Error {
+  constructor() {
+    super('The automatic payment was declined.');
+  }
+}
 
 export const checkoutUrlOf = (p: Pick<Payment, 'id' | 'status' | 'externalSen'>): string | null =>
   p.status === 'pending' && p.externalSen > 0 ? `/checkout/${p.id}` : null;
@@ -139,19 +151,32 @@ export async function createPayment(
 
   const linesTotalSen = lines.reduce((sum, l) => sum + l.lineSen, 0);
   const totalSen = linesTotalSen + deliveryFeeSen;
-  // The balance other pending payments already plan to use is reserved for them. A pending
-  // payment past its deadline can no longer succeed (its result is voided), so it reserves nothing.
-  const balance = await balanceOf(tx, { kind: 'shop_balance', shopId: shop.id });
-  const reserved = await tx.payment.aggregate({
-    where: { shopId: shop.id, status: 'pending', deadlineAt: { gt: ctx.now } },
-    _sum: { balanceAppliedSen: true },
-  });
-  const availableSen = balance - (reserved._sum.balanceAppliedSen ?? 0);
+  // The balance other pending payments already plan to use is reserved for them.
+  const { availableSen } = await availableBalance(tx, shop.id, ctx.now);
   const balanceAppliedSen = Math.max(0, Math.min(availableSen, totalSen));
   const externalSen = totalSen - balanceAppliedSen;
 
+  // An AutoDebit is taken before any payment state is written: a declined debit then leaves
+  // nothing behind, and the caller's transaction (and the draft basket in it) carries on.
+  const paymentId = randomUUID();
+  let debitReference: string | null = null;
+  if (input.settleImmediatelyWith === 'auto_debit' && externalSen > 0) {
+    if (!input.mandateReference) throw new Error('An AutoDebit needs a mandate.');
+    try {
+      ({ reference: debitReference } = await deps.payments.autoDebit({
+        mandateReference: input.mandateReference,
+        amountSen: externalSen,
+        paymentId,
+      }));
+    } catch {
+      throw new AutoDebitDeclined();
+    }
+  }
+
   const payment = await tx.payment.create({
     data: {
+      id: paymentId,
+      partnerReference: debitReference,
       shopId: shop.id,
       purpose: input.purpose,
       basketId: input.basketId ?? null,
@@ -186,7 +211,9 @@ export async function createPayment(
   });
 
   if (externalSen === 0) {
-    await settlePayment(ctx, payment.id, 'balance_only', input.source);
+    await settlePayment(ctx, payment.id, 'balance_only', input.source, { reason: input.reason });
+  } else if (debitReference) {
+    await settlePayment(ctx, payment.id, 'auto_debit', input.source, { reason: input.reason });
   } else {
     const { reference } = await deps.payments.startCheckout({
       paymentId: payment.id,

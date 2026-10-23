@@ -1,5 +1,6 @@
 import { EmptyState } from '@/components/common/empty-state';
 import { MonthSwitcher, SavingsMonth } from '@/components/home/savings-month';
+import { TimeSavedCard } from '@/components/home/time-saved-card';
 import { mytParts } from '@/lib/time';
 import { resolveClock } from '@/server/adapters/clock';
 import { monthlySavings } from '@/server/modules/savings/savings';
@@ -30,6 +31,7 @@ export default async function OwnerSavingsPage({
       <h1 className="text-2xl font-bold">Savings</h1>
       <MonthSwitcher month={month} current={current} />
       <SavingsMonth view={view} />
+      <TimeSavedCard view={view.timeSaved} />
       {view.items.length === 0 ? (
         <EmptyState
           title="No rounds in this month"

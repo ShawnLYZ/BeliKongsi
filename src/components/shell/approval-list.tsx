@@ -16,6 +16,7 @@ const TYPE_LABELS: Record<ApprovalType, string> = {
   supplier_order: 'Supplier order',
   supplier_confirmation: 'Supplier confirmation',
   claim: 'Claim',
+  data_deletion: 'Data deletion',
 };
 
 const ACTION =

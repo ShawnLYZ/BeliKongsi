@@ -48,6 +48,12 @@ export const ACTIONS = [
   'demo.complete_other_rounds',
   'demo.reset',
   'log.verified',
+  'auto_approve.enabled',
+  'auto_approve.disabled',
+  'balance.withdrawn',
+  'data.exported',
+  'data.deletion_requested',
+  'shop.anonymised',
 ] as const;
 
 export type ActionCode = (typeof ACTIONS)[number];
