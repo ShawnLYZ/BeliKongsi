@@ -101,6 +101,12 @@ Response (200):
 }
 ```
 
+Try it:
+
+```bash
+curl -X POST http://localhost:3000/api/engine/v1/quote   -H "Content-Type: application/json"   -H "X-Orbyte-App-Id: kedai-pos"   -d '{"tiers":[{"minQuantity":20,"unitPriceSen":15800},{"minQuantity":50,"unitPriceSen":15200},{"minQuantity":100,"unitPriceSen":14600}],"feeBps":200,"unitShippingSen":293,"quantity":6,"currentRoundTotal":99,"unitName":"carton"}'
+```
+
 ## Close a round
 
 `POST /api/engine/v1/close-round`
@@ -196,6 +202,12 @@ Response (200, trimmed to the same two participants):
 }
 ```
 
+Try it. This is the trimmed request above: with only two participants the Kongsi stays under 100 trays, so it answers `"status": "failed"` with full refunds. List all eleven participants to see the example response.
+
+```bash
+curl -X POST http://localhost:3000/api/engine/v1/close-round   -H "Content-Type: application/json"   -d '{"tiers":[{"minQuantity":100,"unitPriceSen":1170},{"minQuantity":300,"unitPriceSen":1130},{"minQuantity":600,"unitPriceSen":1090}],"feeBps":200,"unitName":"tray","participants":[{"reference":"egg1","quantity":20,"joinedAt":"2026-10-31T00:00:00Z","unitShippingSen":40,"priceLimitSen":null,"paidSen":24660},{"reference":"kafe","quantity":10,"joinedAt":"2026-11-01T22:03:00Z","unitShippingSen":40,"priceLimitSen":1220,"paidSen":12330}]}'
+```
+
 ## Allocate a shortfall
 
 `POST /api/engine/v1/allocate-shortfall`
@@ -264,6 +276,12 @@ Response (200, trimmed to the same two allocations):
 }
 ```
 
+Try it. This is the trimmed request above: with only two kept participations (26 units ordered), the 100 good units cover the order, so nothing is short and `excessFlag` is true. List every kept participation to see the example response.
+
+```bash
+curl -X POST http://localhost:3000/api/engine/v1/allocate-shortfall   -H "Content-Type: application/json"   -d '{"kept":[{"reference":"bg1","quantity":20,"joinedAt":"2026-10-30T01:00:00Z","final":{"goodsSen":14600,"feeSen":292,"shippingSen":293,"allInSen":15185}},{"reference":"kedai","quantity":6,"joinedAt":"2026-11-01T22:05:00Z","final":{"goodsSen":14600,"feeSen":292,"shippingSen":293,"allInSen":15185}}],"goodUnitsReceived":100,"finalGoodsPriceSen":14600}'
+```
+
 ## Limits
 
 So that every amount stays an exact whole number, inputs are bounded. Anything above a limit gets a 422:
@@ -273,6 +291,23 @@ So that every amount stays an exact whole number, inputs are bounded. Anything a
 - `participants` and `kept`: at most 5,000 entries.
 
 ## Errors
+
+### The error format
+
+Every error from every BeliKongsi API, including these three routes, is JSON with the same shape: `code` (a stable machine-readable string), `message` (plain English) and an optional `details`. The status code says what kind of problem it is:
+
+| Status | Meaning                   |
+| ------ | ------------------------- |
+| 400    | invalid input             |
+| 401    | no session                |
+| 403    | role not allowed          |
+| 404    | not visible to the caller |
+| 409    | state conflict            |
+| 422    | business rule broken      |
+| 429    | rate limited              |
+| 503    | AI unavailable            |
+
+The Engine API is public, so in practice it returns only 400 and 422, described below.
 
 ### 422: some fields are not valid
 

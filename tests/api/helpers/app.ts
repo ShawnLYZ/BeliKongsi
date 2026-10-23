@@ -47,6 +47,7 @@ export async function createTestDeps(opts: { now?: string } = {}): Promise<{
       AI_ADAPTER: 'fake',
       GEMINI_MODEL: 'gemini-3.5-flash-lite',
       STORAGE_ADAPTER: 'local',
+      LOCAL_STORAGE_DIR: storageDir,
     },
   };
   return {

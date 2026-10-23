@@ -153,7 +153,8 @@
 
 - Produces:
   - `vercel.json`:
-    - `{ "crons": [{ "path": "/api/jobs/run", "schedule": "0 22 * * *" }], "regions": ["sin1"], "git": { "deploymentEnabled": { "main": true, "*": false } } }`
+    - `{ "crons": [{ "path": "/api/jobs/run", "schedule": "0 22 * * *" }], "regions": ["sin1"], "git": { "deploymentEnabled": { "main": true, "**": false } } }`
+    - Vercel matches `git.deploymentEnabled` keys with minimatch, and `*` does not cross `/`, so `"*"` would still deploy branches such as `feat/x`; use `"**"`. A branch matching several rules deploys if any is `true`, so `main` stays enabled. Docs: https://vercel.com/docs/project-configuration/git-configuration.
     - `0 22 * * *` UTC is 06:00 MYT daily, so the Monday cron drafts baskets on time.
     - Use the exact `git` syntax confirmed in Task 0.
   - `runSecurityChecks(adminUrl: string, appUrl: string): Promise<{ checks: { id: string; passed: boolean; warning?: boolean; detail: string }[] }>`. The checks:
@@ -167,7 +168,7 @@
     - `prod:migrate`: `prisma migrate deploy` with `MIGRATION_DATABASE_URL`.
     - `prod:setup-role`: the same as `db:setup-role`, against the production URL.
     - `prod:storage`: creates the buckets `product-images` (public) and `delivery-photos` (private; `image/jpeg`, `image/png`, `image/webp`; 5 MB) if they're missing, then uploads `prisma/seed/assets/products/*.webp` with upsert.
-    - `prod:check`: `runSecurityChecks`, plus the Supabase security advisor when `SUPABASE_ACCESS_TOKEN` is set. It prints a table and exits 1 on any failure.
+    - `prod:check`: `runSecurityChecks`, plus the Supabase security advisor when `SUPABASE_ACCESS_TOKEN` is set. The advisor call is `GET https://api.supabase.com/v1/projects/{ref}/advisors/security` with `Authorization: Bearer <SUPABASE_ACCESS_TOKEN>` (a personal access token with the `advisors_read` permission). It is marked experimental and returns `{ lints: [{ name, title, level, categories, description, remediation, metadata, ... }] }`; fail on `level` `ERROR`, warn on `WARN`, and treat a 401/403/404 or network error as a warning (advisor unavailable), not a pass. Docs: https://supabase.com/docs/reference/api/v1-get-security-advisors. It prints a table and exits 1 on any failure.
   - `docs/deployment.md`: the build design §7 steps, each with the exact command, the expected output and what to do if it fails. Included:
     - the Vercel environment variable list (§5.5), marked production-only
     - `ENABLE_EXPERIMENTAL_COREPACK=1`, so Vercel uses pnpm 10.34.7

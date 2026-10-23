@@ -1,5 +1,5 @@
-import { Client, escapeLiteral } from 'pg';
 import { assertLocalDatabase } from './lib/local-only';
+import { setupAppRole } from './lib/setup-role';
 
 // Loads .env.local then .env like prisma.config.ts, and refuses a non-local database.
 assertLocalDatabase();
@@ -9,14 +9,7 @@ async function main(): Promise<void> {
   if (!url) throw new Error('MIGRATION_DATABASE_URL is not set.');
   const password = process.env.BK_APP_DB_PASSWORD;
   if (!password?.trim()) throw new Error('BK_APP_DB_PASSWORD is not set or is blank.');
-
-  const client = new Client({ connectionString: url });
-  await client.connect();
-  try {
-    await client.query(`ALTER ROLE bk_app WITH LOGIN PASSWORD ${escapeLiteral(password)}`);
-  } finally {
-    await client.end();
-  }
+  await setupAppRole(url, password);
   console.log('Role bk_app can now log in.');
 }
 

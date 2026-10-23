@@ -49,7 +49,11 @@ describe('getServerEnv', () => {
       AI_ADAPTER: 'fake',
       GEMINI_MODEL: 'gemini-3.5-flash-lite',
       STORAGE_ADAPTER: 'local',
+      LOCAL_STORAGE_DIR: '.data/storage',
     });
+    expect(
+      getServerEnv({ ...valid, LOCAL_STORAGE_DIR: '.data/storage-e2e' }).LOCAL_STORAGE_DIR,
+    ).toBe('.data/storage-e2e');
     expect(getServerEnv({ ...valid, DEMO_MODE: 'false' }).DEMO_MODE).toBe(false);
     expect(getServerEnv({ ...valid, DEMO_MODE: 'true' }).DEMO_MODE).toBe(true);
     expect(() => getServerEnv({ ...valid, DEMO_MODE: 'maybe' })).toThrow(/DEMO_MODE/);

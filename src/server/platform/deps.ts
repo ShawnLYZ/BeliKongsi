@@ -43,7 +43,7 @@ export function getDeps(): AppDeps {
               serviceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY!,
             })
           : createLocalStorage({
-              dir: '.data/storage',
+              dir: env.LOCAL_STORAGE_DIR,
               secret: env.SESSION_SECRET,
               now: () => systemClock.now(),
             }),

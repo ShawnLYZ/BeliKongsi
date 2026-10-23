@@ -1,3 +1,5 @@
 {
-  "crons": [{ "path": "/api/jobs/run", "schedule": "0 22 * * *" }]
+  "crons": [{ "path": "/api/jobs/run", "schedule": "0 22 * * *" }],
+  "regions": ["sin1"],
+  "git": { "deploymentEnabled": { "main": true, "**": false } }
 }

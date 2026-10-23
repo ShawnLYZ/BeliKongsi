@@ -12,6 +12,7 @@ const schema = z
     GEMINI_API_KEY: z.string().min(1).optional(),
     GEMINI_MODEL: z.string().min(1).default('gemini-3.5-flash-lite'),
     STORAGE_ADAPTER: z.enum(['local', 'supabase']).default('local'),
+    LOCAL_STORAGE_DIR: z.string().min(1).default('.data/storage'),
     SUPABASE_URL: z.string().min(1).optional(),
     SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
   })
@@ -39,6 +40,11 @@ const schema = z
 export type ServerEnv = z.infer<typeof schema>;
 
 const order = Object.keys(schema.shape);
+
+/** Every variable name the server schema reads; `.env.example` must list all of them. */
+export function serverEnvKeys(): string[] {
+  return [...order];
+}
 let cached: ServerEnv | undefined;
 
 function parse(source: Record<string, string | undefined>): ServerEnv {
@@ -48,14 +54,29 @@ function parse(source: Record<string, string | undefined>): ServerEnv {
     Object.entries(source).filter(([, v]) => v !== undefined && v !== '' && !/^<.*>$/.test(v)),
   );
   const result = schema.safeParse(input);
-  if (result.success) return result.data;
+
+  // On Vercel the schema defaults (fake AI, local storage) would quietly run a broken demo, so the
+  // adapters must be named explicitly and must be the real ones.
+  const reasons = new Map<string, string>();
+  if (source.VERCEL === '1') {
+    const required: [string, string][] = [
+      ['AI_ADAPTER', 'gemini'],
+      ['STORAGE_ADAPTER', 'supabase'],
+    ];
+    for (const [name, real] of required) {
+      if (input[name] === undefined) reasons.set(name, `required on Vercel (set it to ${real})`);
+      else if (input[name] !== real) reasons.set(name, `must be ${real} on Vercel`);
+    }
+  }
+  if (result.success && reasons.size === 0) return result.data;
 
   // Report names and reasons only; values (which may be secrets) are never included.
-  const reasons = new Map<string, string>();
-  for (const issue of result.error.issues) {
-    const name = String(issue.path[0] ?? 'environment');
-    if (!reasons.has(name)) {
-      reasons.set(name, issue.code === 'custom' ? issue.message : 'missing or invalid');
+  if (!result.success) {
+    for (const issue of result.error.issues) {
+      const name = String(issue.path[0] ?? 'environment');
+      if (!reasons.has(name)) {
+        reasons.set(name, issue.code === 'custom' ? issue.message : 'missing or invalid');
+      }
     }
   }
   const sorted = [...reasons].sort(

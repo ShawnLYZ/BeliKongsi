@@ -26,6 +26,7 @@ function depsFor(url: string): AppDeps {
       AI_ADAPTER: 'fake',
       GEMINI_MODEL: 'gemini-3.5-flash-lite',
       STORAGE_ADAPTER: 'local',
+      LOCAL_STORAGE_DIR: '.data/storage',
     },
     clock: systemClock,
     logistics: simulatedLogistics,

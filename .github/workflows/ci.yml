@@ -32,6 +32,7 @@ jobs:
           FC_NUM_RUNS: '5000'
       - run: pnpm test:api
       - run: pnpm build
+      - run: pnpm check:bundle
 
   e2e:
     if: github.ref == 'refs/heads/main'
