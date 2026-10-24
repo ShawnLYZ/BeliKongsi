@@ -15,7 +15,7 @@ export function PickupStatusBadge({ pickup }: { pickup: PickupView }) {
             : 'bg-accent/30 text-foreground',
       )}
     >
-      {pickup.statusLabel}
+      {pickup.status === 'partly_ready' ? 'Part of your goods is ready' : pickup.statusLabel}
     </span>
   );
 }

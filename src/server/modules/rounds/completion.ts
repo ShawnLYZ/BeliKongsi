@@ -2,6 +2,23 @@ import { appendLog } from '@/server/modules/activity/log';
 import type { TxContext } from '@/server/platform/tx';
 
 /**
+ * The rounds of every allocation on a pickup, cancelled ones included: a cancelled allocation
+ * still belongs to its round, whose completion waits for this pickup to close.
+ */
+export async function roundsOfPickup(ctx: TxContext, pickupId: string): Promise<string[]> {
+  const { tx } = ctx;
+  const allocations = await tx.allocation.findMany({
+    where: { pickupId },
+    select: { participationId: true },
+  });
+  const parts = await tx.participation.findMany({
+    where: { id: { in: allocations.map((a) => a.participationId) } },
+    select: { roundId: true },
+  });
+  return [...new Set(parts.map((p) => p.roundId))];
+}
+
+/**
  * A round is `completed` once every pickup carrying its allocations is `closed` (PRD §10): the
  * goods are with the shops and every delivery check, and any claim, is settled. Looks at each
  * dispatched or at-hub round of the list; a round with no allocated goods, or with goods not yet

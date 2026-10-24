@@ -25,6 +25,14 @@ function PickupSummary({ pickup }: { pickup: PickupView }) {
       <p>
         <PickupStatusBadge pickup={pickup} />
       </p>
+      {pickup.late ? (
+        <p className="text-destructive text-base font-semibold">
+          Late
+          {pickup.late.newExpectedAt
+            ? `, new date ${formatMytDate(new Date(pickup.late.newExpectedAt))}`
+            : ''}
+        </p>
+      ) : null}
       {pickup.code && !isHandedOver(pickup) ? (
         <PickupCode code={pickup.code} size="small" className="mt-1" />
       ) : null}
@@ -35,23 +43,29 @@ function PickupSummary({ pickup }: { pickup: PickupView }) {
 
 /**
  * A shop's pickups as cards: place, date, opening hours, where the goods are, and the code.
- * Goods not at the hub yet have no pickup page, so their card is not a link. No money (R6).
+ * Goods not at the hub yet have no pickup page; their card links to `groupHrefBase` (the owner's
+ * page with "Cancel late item") when given, else it is not a link. No money (R6).
  */
 export function PickupList({
   items,
   hrefBase,
+  groupHrefBase,
   label,
 }: {
   items: PickupView[];
   hrefBase: string;
+  groupHrefBase?: string;
   label: string;
 }) {
   return (
     <ul aria-label={label} className="flex flex-col gap-3">
       {items.map((p, i) => (
         <li key={p.pickupId ?? `group-${i}`} className="bg-card rounded-2xl border">
-          {p.pickupId ? (
-            <Link href={`${hrefBase}/${p.pickupId}`} className={CARD_LINK}>
+          {p.pickupId || (groupHrefBase && p.groupKey) ? (
+            <Link
+              href={p.pickupId ? `${hrefBase}/${p.pickupId}` : `${groupHrefBase}/${p.groupKey}`}
+              className={CARD_LINK}
+            >
               <PickupSummary pickup={p} />
               <ChevronRight aria-hidden="true" className="mt-1 size-5 shrink-0" />
             </Link>

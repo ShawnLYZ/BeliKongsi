@@ -20,6 +20,7 @@ const STATUS_LABELS: Record<string, string> = {
   shorted: 'Fewer goods than ordered',
   received: 'Received',
   closed: 'Closed',
+  cancelled_late: 'Cancelled late: refunded',
 };
 
 export function statusWords(code: string): string {

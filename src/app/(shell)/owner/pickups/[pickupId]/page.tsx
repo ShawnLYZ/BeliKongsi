@@ -1,8 +1,11 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { BUTTON_SECONDARY } from '@/components/common/controls';
-import { DeliveryCheckForm } from '@/components/checks/delivery-check-form';
+import { DeliveryChecks } from '@/components/checks/delivery-check-form';
 import { TimelineSheet } from '@/components/common/timeline-sheet';
+import { CollectionsList } from '@/components/pickups/collections-list';
+import { LateBanner } from '@/components/pickups/late-banner';
+import { LateCancelList } from '@/components/pickups/late-cancel-list';
 import { PickupDetail } from '@/components/pickups/pickup-detail';
 import { listShopPickups } from '@/server/modules/fulfilment/pickups';
 import { personCaller } from '@/server/platform/caller';
@@ -27,8 +30,11 @@ export default async function OwnerPickupPage({
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-2xl font-bold">Your pickup</h1>
+      <LateBanner pickup={pickup} showCancelNote />
       <PickupDetail pickup={pickup} />
-      <DeliveryCheckForm pickup={pickup} claimBase="/owner/claims" />
+      <LateCancelList pickup={pickup} />
+      <CollectionsList pickup={pickup} />
+      <DeliveryChecks pickup={pickup} claimBase="/owner/claims" />
       <TimelineSheet subjectType="pickup" subjectId={pickupId} title="Pickup timeline" />
       <Link href="/owner/pickups" className={BUTTON_SECONDARY}>
         All pickups

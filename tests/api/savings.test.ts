@@ -80,17 +80,17 @@ beforeAll(async () => {
     await moveConsignment(app, c.id, 'dispatched');
     await moveConsignment(app, c.id, 'arrived');
   }
+  // The goods are collected and checked at 23:30 on 30 November in Malaysia (15:30 UTC), inside the 72-hour window.
+  const settings = await app.prisma.demoSettings.findUniqueOrThrow({ where: { id: 1 } });
+  app.clock.set(
+    new Date(Date.parse('2026-11-30T15:30:00Z') - Number(settings.clockOffsetMs)).toISOString(),
+  );
   const p = await pickupOf('KEDAI_KOPI', DATE);
   const rahim = await app.as('rahim');
   expect((await rahim.post(`/api/pickups/${p.id}/collect`, { code: p.code })).status).toBe(200);
   estimatedItems = await historyItems();
   monthBeforeCheck = (await ah.get(`/api/shops/${KEDAI}/savings?month=2026-11`)).body;
 
-  // The delivery check goes in at 23:30 on 30 November in Malaysia (15:30 UTC).
-  const settings = await app.prisma.demoSettings.findUniqueOrThrow({ where: { id: 1 } });
-  app.clock.set(
-    new Date(Date.parse('2026-11-30T15:30:00Z') - Number(settings.clockOffsetMs)).toISOString(),
-  );
   const photo = await uploadPhoto(rahim, p.id);
   const cmAlloc = (await allocationOf('KEDAI_KOPI', 'CM')).id;
   const res = await rahim.post(`/api/pickups/${p.id}/delivery-check`, {
@@ -312,6 +312,8 @@ describe('the timeline of a Kongsi line', () => {
     expect(actions).toEqual([
       'participation.joined',
       'refund.issued',
+      // Partly ready when the first consignment arrived (P1-8), then ready.
+      'fulfilment.pickup_ready',
       'fulfilment.pickup_ready',
       'fulfilment.pickup_collected',
       'check.delivery_check_submitted',
@@ -343,6 +345,7 @@ describe('the timeline of a Kongsi line', () => {
     const pickup = await pickupOf('KEDAI_KOPI', DATE);
     expect(await actionsOf('pickup', pickup.id)).toEqual([
       'fulfilment.pickup_ready',
+      'fulfilment.pickup_ready',
       'fulfilment.pickup_collected',
       'check.delivery_check_submitted',
       'claim.submitted',
@@ -353,6 +356,7 @@ describe('the timeline of a Kongsi line', () => {
   it('follows a claim back to its check and pickup', async () => {
     const claim = await app.prisma.claim.findFirstOrThrow({ where: { shopId: KEDAI } });
     expect(await actionsOf('claim', claim.id)).toEqual([
+      'fulfilment.pickup_ready',
       'fulfilment.pickup_ready',
       'fulfilment.pickup_collected',
       'check.delivery_check_submitted',

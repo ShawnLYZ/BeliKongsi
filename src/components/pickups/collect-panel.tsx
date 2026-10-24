@@ -41,17 +41,21 @@ export function CollectPanel({ pickup }: { pickup: PickupView }) {
   const [busy, setBusy] = useState(false);
   const [codeError, setCodeError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
+  // How many parts there were when this one was handed over; the confirmation shows until the page catches up.
+  const [doneAt, setDoneAt] = useState<number | null>(null);
   const door = pickup.destinationType === 'door';
 
-  if (done || isHandedOver(pickup)) return <Confirmation door={door} />;
+  const justHandedOver = doneAt !== null && pickup.collections.length <= doneAt;
+  if (justHandedOver || isHandedOver(pickup)) return <Confirmation door={door} />;
 
   if (!canHandOver(pickup) || !pickup.pickupId || !pickup.code) {
     return (
       <p className="bg-muted rounded-2xl p-4 text-base">
-        {door
-          ? 'You can confirm the delivery once the goods are out for delivery.'
-          : 'You can collect once the goods are ready for pickup. We will send a message when they are.'}
+        {pickup.collections.length > 0
+          ? 'You have taken part of these goods. The rest is still on its way. We will send a message when you can collect it with the same code.'
+          : door
+            ? 'You can confirm the delivery once the goods are out for delivery.'
+            : 'You can collect once the goods are ready for pickup. We will send a message when they are.'}
       </p>
     );
   }
@@ -72,7 +76,8 @@ export function CollectPanel({ pickup }: { pickup: PickupView }) {
         body: { code },
         quiet: true,
       });
-      setDone(true);
+      setDoneAt(pickup.collections.length);
+      setCode('');
       router.refresh();
     } catch (e) {
       if (e instanceof ApiError && e.code === 'WRONG_CODE') setCodeError(e.message);
@@ -90,7 +95,13 @@ export function CollectPanel({ pickup }: { pickup: PickupView }) {
   return (
     <section aria-labelledby={`${id}-title`} className="flex flex-col gap-4">
       <h2 id={`${id}-title`} className="text-xl font-bold">
-        {door ? 'Confirm the delivery' : 'Collect your goods'}
+        {pickup.status === 'partly_ready'
+          ? door
+            ? 'Confirm the part that arrived'
+            : 'Collect the part that is ready'
+          : door
+            ? 'Confirm the delivery'
+            : 'Collect your goods'}
       </h2>
       <button
         type="button"

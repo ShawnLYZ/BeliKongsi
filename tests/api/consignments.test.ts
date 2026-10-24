@@ -180,7 +180,8 @@ describe('Pickups follow the consignments', () => {
     const johor = await consignmentFor({ ...KV_IPOH, hub: 'HUB_JOHOR' });
     await moveConsignment(app, kv.id, 'dispatched');
     await moveConsignment(app, kv.id, 'arrived');
-    expect((await pickupOf('KEDAI_KOPI', DATE)).status).toBe('waiting');
+    // The KV goods can be collected on their own (P1-8); the eggs are still on the way.
+    expect((await pickupOf('KEDAI_KOPI', DATE)).status).toBe('partly_ready');
     await moveConsignment(app, johor.id, 'dispatched');
     await moveConsignment(app, johor.id, 'arrived');
 

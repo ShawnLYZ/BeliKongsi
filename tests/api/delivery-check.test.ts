@@ -1,8 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { seedId } from '../../prisma/seed/ids';
-import { runBackgroundAutomation } from '@/server/modules/fulfilment/background';
-import { systemCaller } from '@/server/platform/caller';
-import { withTransaction } from '@/server/platform/tx';
 import { createTestApp, type TestApp } from './helpers/app';
 import { expectNoMoneyFields } from './helpers/scans';
 import {
@@ -251,6 +248,12 @@ describe('Delivery check', () => {
   });
 
   it('refuses a check before the goods are collected', async () => {
+    // Undo the collection: the pickup is back to ready with nothing handed over.
+    await app.prisma.allocation.updateMany({
+      where: { pickupId: p.id },
+      data: { collectionId: null },
+    });
+    await app.prisma.pickupCollection.deleteMany({ where: { pickupId: p.id } });
     await app.prisma.pickup.update({ where: { id: p.id }, data: { status: 'ready' } });
     expect(await check({ allReceived: true })).toMatchObject({
       status: 409,
@@ -273,18 +276,33 @@ describe('Delivery check', () => {
       where: {
         shopId: { in: shops.map((x) => x.id) },
         destinationType: 'pickup_point',
+        // At Ipoh, where both consignments arrived.
+        pickupPointId: PP_IPOH,
         deliveryDate: DATE,
       },
       orderBy: { id: 'asc' },
     });
-    await app.prisma.pickup.update({ where: { id: bg.id }, data: { status: 'ready' } });
-    await withTransaction(app.deps, systemCaller('test'), (ctx) =>
-      runBackgroundAutomation(ctx, [bg.id]),
-    );
-    expect((await app.prisma.pickup.findUniqueOrThrow({ where: { id: bg.id } })).status).toBe(
-      'closed',
-    );
-    const dc = await app.prisma.deliveryCheck.findUniqueOrThrow({ where: { pickupId: bg.id } });
+    // The background shop took what arrived on its own (P1-8: even while one of its rounds is
+    // still to be hub-checked), and its collection was checked at once.
+    const collection = await app.prisma.pickupCollection.findFirstOrThrow({
+      where: { pickupId: bg.id },
+      orderBy: { collectedAt: 'asc' },
+    });
+    expect(collection).toMatchObject({ method: 'system', collectedByUserId: null });
+    const status = (await app.prisma.pickup.findUniqueOrThrow({ where: { id: bg.id } })).status;
+    const stillComing = await app.prisma.participation.count({
+      where: {
+        shopId: bg.shopId,
+        deliveryDate: DATE,
+        destinationType: 'pickup_point',
+        pickupPointId: bg.pickupPointId,
+        status: { in: ['active', 'kept'] },
+      },
+    });
+    expect(status).toBe(stillComing > 0 ? 'waiting' : 'closed');
+    const dc = await app.prisma.deliveryCheck.findFirstOrThrow({
+      where: { collectionId: collection.id },
+    });
     expect(dc).toMatchObject({ result: 'all_received', submittedByUserId: null });
     const log = await app.prisma.activityLogEntry.findFirstOrThrow({
       where: { action: 'check.delivery_check_submitted', subjectId: dc.id },

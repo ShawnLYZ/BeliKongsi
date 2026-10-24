@@ -140,11 +140,12 @@ describe('Pickup readiness (C4)', () => {
   const refresh = (ids: string[]) =>
     withTransaction(app.deps, systemCaller('test'), (ctx) => refreshPickupReadiness(ctx, ids));
 
-  it('keeps a pickup waiting while other rounds for that date are still kept', async () => {
+  it('keeps a pickup from being ready while other rounds for that date are still kept', async () => {
     await arriveAll();
     const p = await pickupOf('KEDAI_KOPI', DATE);
     await refresh([p.id]);
-    expect((await pickupOf('KEDAI_KOPI', DATE)).status).toBe('waiting');
+    // The arrived goods can go on their own (P1-8 relaxes gate 1), but the pickup is not ready.
+    expect((await pickupOf('KEDAI_KOPI', DATE)).status).toBe('partly_ready');
   });
 
   it('keeps a pickup waiting while a consignment carrying its goods has not arrived', async () => {
@@ -229,15 +230,15 @@ describe('Pickup readiness (C4)', () => {
 describe('Through the partner status moves', () => {
   const KV_IPOH = { hub: 'HUB_KV', destinationKey: `pp:${PP_IPOH}`, deliveryDate: DATE };
 
-  it('keeps a pickup waiting while other rounds for that date have not reached the hub (C4)', async () => {
+  it('keeps a pickup from being ready while other rounds for that date have not reached the hub (C4)', async () => {
     app = await createTestApp({ seed: 'demo' });
     await toHubChecked(app, ['CM']);
     const c = await consignmentFor(KV_IPOH);
     await moveConsignment(app, c.id, 'dispatched');
     await moveConsignment(app, c.id, 'arrived');
-    // OIL, EGG_A, COFFEE and CUPS are still kept.
+    // OIL, EGG_A, COFFEE and CUPS are still kept: the condensed milk can go alone (P1-8).
     expect((await participationOf('KEDAI_KOPI', 'OIL')).status).toBe('kept');
-    expect((await pickupOf('KEDAI_KOPI', DATE)).status).toBe('waiting');
+    expect((await pickupOf('KEDAI_KOPI', DATE)).status).toBe('partly_ready');
   });
 
   it('starts a new consignment wave once the first has left (C3)', async () => {
@@ -265,7 +266,8 @@ describe('Through the partner status moves', () => {
     const c = await consignmentFor(KV_IPOH);
     await moveConsignment(app, c.id, 'dispatched');
     await moveConsignment(app, c.id, 'arrived');
-    expect((await pickupOf('KEDAI_KOPI', DATE)).status).toBe('waiting');
+    // Cups still hold back the whole pickup; what arrived can go on its own (P1-8).
+    expect((await pickupOf('KEDAI_KOPI', DATE)).status).toBe('partly_ready');
 
     const cupsOrder = await supplierOrderOf(cups.roundId);
     const rejected = await (

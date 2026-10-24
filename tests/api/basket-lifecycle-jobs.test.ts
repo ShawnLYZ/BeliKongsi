@@ -208,6 +208,11 @@ describe('jobs runner', () => {
         failedRounds: 0,
         expiredBaskets: 0,
         monthlySummaries,
+        lateDeliveries: 0,
+        uncollectedReminders: 0,
+        checkReminders: 0,
+        uncheckedClosed: 0,
+        operationalReminders: 0,
       });
     }
   });
@@ -229,6 +234,11 @@ describe('jobs runner', () => {
       failedRounds: 0,
       expiredBaskets: 0,
       monthlySummaries: 0,
+      lateDeliveries: 0,
+      uncollectedReminders: 0,
+      checkReminders: 0,
+      uncheckedClosed: 0,
+      operationalReminders: 0,
     });
   });
 });

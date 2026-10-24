@@ -219,8 +219,18 @@ export async function getRoundForCaller(
   };
 }
 
-/** The statuses of a line that went ahead at the close (kept, and what kept lines become later). */
-const KEPT_STATUSES = ['kept', 'allocated', 'shorted', 'received', 'closed'] as const;
+/**
+ * The statuses of a line that went ahead at the close (kept, and what kept lines become later,
+ * including a late cancellation after the close).
+ */
+const KEPT_STATUSES = [
+  'kept',
+  'allocated',
+  'shorted',
+  'received',
+  'closed',
+  'cancelled_late',
+] as const;
 
 /** A formed round's close result; null while open, or when it closed empty or failed. */
 async function roundResult(

@@ -59,7 +59,8 @@ describe('Complete other rounds', () => {
       (c: { consignmentId: string }) => c.consignmentId === kvIpoh.id,
     );
     expect(view).toMatchObject({ status: 'planned', containsFeaturedRound: true });
-    expect((await pickupOf('KEDAI_KOPI', DATE)).status).toBe('waiting');
+    // The Johor eggs are there and can be collected on their own (P1-8).
+    expect((await pickupOf('KEDAI_KOPI', DATE)).status).toBe('partly_ready');
 
     // No consignment without featured goods is left planned.
     const planned = (await nadia.get('/api/ops/consignments')).body.items.filter(

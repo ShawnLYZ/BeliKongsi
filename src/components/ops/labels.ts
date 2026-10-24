@@ -8,6 +8,7 @@ const POSTING_KINDS: Record<string, string> = {
   refund_difference: 'Refunds: price difference',
   refund_dropped: 'Refunds: above price limit',
   refund_failed: 'Refunds: round did not go ahead',
+  refund_late: 'Refunds: late item cancelled',
   refund_round_cancelled: 'Refunds: round cancelled',
   refund_shortfall: 'Refunds: delivered short',
   refund_delivery_fee: 'Refunds: delivery fee',

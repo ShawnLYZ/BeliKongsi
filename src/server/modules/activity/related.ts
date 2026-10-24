@@ -50,20 +50,24 @@ export async function relatedSubjects(
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** The pickup (when `withPickup`), its delivery check and the claim that check opened. */
+/** The pickup (when `withPickup`), its delivery checks and the claims those checks opened. */
 async function pickupChain(
   prisma: PrismaClient,
   { pickupId }: { pickupId: string | null },
   withPickup = true,
 ): Promise<Subject[]> {
   if (!pickupId) return [];
-  const check = await prisma.deliveryCheck.findUnique({
+  // One check per collection (P1-8), each with the claim it may have opened.
+  const checks = await prisma.deliveryCheck.findMany({
     where: { pickupId },
     select: { id: true, claim: { select: { id: true } } },
+    orderBy: [{ submittedAt: 'asc' }, { id: 'asc' }],
   });
   return [
     ...(withPickup ? [{ type: 'pickup', id: pickupId }] : []),
-    ...(check ? [{ type: 'delivery_check', id: check.id }] : []),
-    ...(check?.claim ? [{ type: 'claim', id: check.claim.id }] : []),
+    ...checks.flatMap((check) => [
+      { type: 'delivery_check', id: check.id },
+      ...(check.claim ? [{ type: 'claim', id: check.claim.id }] : []),
+    ]),
   ];
 }

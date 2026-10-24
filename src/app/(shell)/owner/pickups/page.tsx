@@ -26,7 +26,12 @@ export default async function OwnerPickupsPage() {
           example="Ipoh pickup point, Tue 11 Nov, code 482 913."
         />
       ) : (
-        <PickupList items={upcoming.items} hrefBase="/owner/pickups" label="Coming up" />
+        <PickupList
+          items={upcoming.items}
+          hrefBase="/owner/pickups"
+          groupHrefBase="/owner/pickups/later"
+          label="Coming up"
+        />
       )}
       {past.items.length > 0 ? (
         <>

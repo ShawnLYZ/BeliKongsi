@@ -1,7 +1,9 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { BUTTON_SECONDARY } from '@/components/common/controls';
-import { DeliveryCheckForm } from '@/components/checks/delivery-check-form';
+import { DeliveryChecks } from '@/components/checks/delivery-check-form';
+import { CollectionsList } from '@/components/pickups/collections-list';
+import { LateBanner } from '@/components/pickups/late-banner';
 import { CollectPanel } from '@/components/pickups/collect-panel';
 import { PickupFacts } from '@/components/pickups/pickup-facts';
 import { listShopPickups } from '@/server/modules/fulfilment/pickups';
@@ -28,9 +30,11 @@ export default async function StaffDeliveryPage({
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-2xl font-bold">Confirm delivery</h1>
+      <LateBanner pickup={pickup} />
       <PickupFacts pickup={pickup} />
+      <CollectionsList pickup={pickup} />
       <CollectPanel pickup={pickup} />
-      <DeliveryCheckForm pickup={pickup} claimBase={null} />
+      <DeliveryChecks pickup={pickup} claimBase={null} />
       <Link href="/staff/deliveries" className={BUTTON_SECONDARY}>
         All pickups
       </Link>

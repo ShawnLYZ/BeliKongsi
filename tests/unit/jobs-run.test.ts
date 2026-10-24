@@ -22,6 +22,16 @@ vi.mock('@/server/modules/savings/monthly-summary', () => ({
     throw new Error('summaries unavailable');
   },
 }));
+vi.mock('@/server/modules/fulfilment/late', () => ({
+  detectLateDeliveries: async () => ({ detected: 0 }),
+}));
+vi.mock('@/server/modules/fulfilment/reminders', () => ({
+  remindUncollected: async () => ({ reminded: 0 }),
+  enforceCheckWindow: async () => ({ reminded: 0, closed: 0 }),
+}));
+vi.mock('@/server/modules/supplier-orders/reminders', () => ({
+  sendOperationalReminders: async () => ({ sent: 0 }),
+}));
 vi.mock('@/server/modules/directory/deletion', () => ({ sweepDeletedPhotos: sweep }));
 
 describe('runDueJobs', () => {

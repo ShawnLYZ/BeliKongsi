@@ -1,14 +1,14 @@
 import type { ApprovalRequest } from '@/generated/prisma/client';
 import { appendLog } from '@/server/modules/activity/log';
 import type { DecisionInput } from '@/server/modules/approvals/approvals';
+import { settlePickup } from '@/server/modules/checks/delivery-check';
 import { VIEW_LINK_SECONDS } from '@/server/modules/checks/photos';
 import { lockDestinations } from '@/server/modules/fulfilment/plan';
-import { PICKUP_LINKS } from '@/server/modules/fulfilment/readiness';
+import { LIVE_ALLOCATION, PICKUP_LINKS } from '@/server/modules/fulfilment/readiness';
 import { emitEvent } from '@/server/modules/integration/events';
 import { post } from '@/server/modules/ledger/post';
 import { notify, TEMPLATES } from '@/server/modules/notifications/notify';
 import { lockShop } from '@/server/modules/payments/fee';
-import { refreshRoundCompletion } from '@/server/modules/rounds/completion';
 import type { Caller } from '@/server/platform/caller';
 import type { AppDeps } from '@/server/platform/deps';
 import { conflict, notFound } from '@/server/platform/errors';
@@ -207,7 +207,7 @@ async function lockedClaim(ctx: TxContext, request: ApprovalRequest) {
   const { tx } = ctx;
   const head = await tx.claim.findUniqueOrThrow({
     where: { id: request.subjectId },
-    include: { deliveryCheck: { select: { pickupId: true } } },
+    include: { deliveryCheck: { select: { pickupId: true, collectionId: true } } },
   });
   const pickup = await tx.pickup.findUniqueOrThrow({
     where: { id: head.deliveryCheck.pickupId },
@@ -226,15 +226,17 @@ async function lockedClaim(ctx: TxContext, request: ApprovalRequest) {
     tx,
     claim.lines.map((l) => l.allocation),
   );
-  return { claim, pickupId: pickup.id, products };
+  return { claim, pickupId: pickup.id, collectionId: head.deliveryCheck.collectionId, products };
 }
 
-/** Closes the claim's pickup and its participations, then refreshes the rounds it carried. */
-async function closePickup(ctx: TxContext, pickupId: string) {
+/**
+ * Closes the participations of the claim's collection, then settles its pickup: it closes (and
+ * the rounds it carried are refreshed) once nothing is left to collect, check or decide (P1-8).
+ */
+async function closeClaimedGoods(ctx: TxContext, pickupId: string, collectionId: string) {
   const { tx, now } = ctx;
-  await tx.pickup.update({ where: { id: pickupId }, data: { status: 'closed' } });
   const allocations = await tx.allocation.findMany({
-    where: { pickupId, allocated: { gt: 0 } },
+    where: { collectionId, allocated: { gt: 0 }, ...LIVE_ALLOCATION },
     select: { participationId: true },
   });
   const partIds = allocations.map((a) => a.participationId);
@@ -242,14 +244,7 @@ async function closePickup(ctx: TxContext, pickupId: string) {
     where: { id: { in: partIds } },
     data: { status: 'closed', updatedAt: now },
   });
-  const parts = await tx.participation.findMany({
-    where: { id: { in: partIds } },
-    select: { roundId: true },
-  });
-  await refreshRoundCompletion(
-    ctx,
-    parts.map((p) => p.roundId),
-  );
+  await settlePickup(ctx, pickupId);
 }
 
 /** "damaged carton" for the notice: the adjective by what occurs, the noun shared or "item". */
@@ -302,7 +297,7 @@ async function tellShop(
 /** Ops approves: the refund goes to the shop's balance and the pickup is closed (story 128). */
 export async function approveClaim(ctx: TxContext, request: ApprovalRequest): Promise<void> {
   const locked = await lockedClaim(ctx, request);
-  const { claim, pickupId } = locked;
+  const { claim, pickupId, collectionId } = locked;
   const phrase = unitPhrase(locked);
   if (claim.totalRefundSen > 0) {
     await post(ctx, {
@@ -314,7 +309,7 @@ export async function approveClaim(ctx: TxContext, request: ApprovalRequest): Pr
     });
   }
   await decide(ctx, claim.id, 'approved', null);
-  await closePickup(ctx, pickupId);
+  await closeClaimedGoods(ctx, pickupId, collectionId);
   await appendLog(ctx, {
     action: 'claim.approved',
     subjectType: 'claim',
@@ -364,10 +359,10 @@ export async function rejectClaim(
 ): Promise<void> {
   const reason = input.reason?.trim() ?? '';
   const locked = await lockedClaim(ctx, request);
-  const { claim, pickupId } = locked;
+  const { claim, pickupId, collectionId } = locked;
   const phrase = unitPhrase(locked);
   await decide(ctx, claim.id, 'rejected', reason);
-  await closePickup(ctx, pickupId);
+  await closeClaimedGoods(ctx, pickupId, collectionId);
   await appendLog(ctx, {
     action: 'claim.rejected',
     subjectType: 'claim',

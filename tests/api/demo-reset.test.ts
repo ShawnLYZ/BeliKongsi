@@ -58,7 +58,9 @@ describe('demo state and reset', () => {
     expect(count('participation.joined')).toBe(68 + 89);
     expect(count('basket.drafted')).toBe(2 + 2);
     expect(count('basket.approved')).toBe(2 + 2);
-    expect(entries).toHaveLength(849);
+    // Its consignments arrive one by one (P1-8): 22 pickups are partly ready first, and background
+    // shops collect and check those 22 first parts on their own (22 + 22 + 22 entries).
+    expect(entries).toHaveLength(849 + 66);
   });
 
   it('sets the demo clock to the most recent Monday 06:05', async () => {

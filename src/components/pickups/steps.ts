@@ -43,7 +43,8 @@ export const isHandedOver = (p: Pick<PickupView, 'status'>): boolean =>
 
 /** True when the code can hand the goods over now. */
 export const canHandOver = (p: Pick<PickupView, 'status' | 'destinationType'>): boolean =>
-  p.destinationType === 'door' ? p.status === 'out_for_delivery' : p.status === 'ready';
+  p.status === 'partly_ready' ||
+  (p.destinationType === 'door' ? p.status === 'out_for_delivery' : p.status === 'ready');
 
 /** Where the goods go: the pickup point's name, or the shop for a door delivery. */
 export const placeLabel = (p: Pick<PickupView, 'placeName'>): string =>

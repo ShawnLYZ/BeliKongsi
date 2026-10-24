@@ -89,6 +89,7 @@ const REFUND_LABEL: Record<string, (name: string) => string> = {
   refund_difference: (n) => `Refund: ${n} closed at a lower price`,
   refund_dropped: (n) => `Refund: ${n} was dropped because the price went above your limit`,
   refund_failed: (n) => `Refund: the ${n} Kongsi didn't reach its minimum order`,
+  refund_late: (n) => `Refund: you cancelled ${n} because it was late`,
   refund_round_cancelled: (n) => `Refund: the ${n} round was cancelled`,
   refund_shortfall: (n) => `Refund: some ${n} units didn't arrive at the hub`,
 };

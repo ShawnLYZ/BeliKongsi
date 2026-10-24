@@ -57,16 +57,17 @@ beforeAll(async () => {
     await moveConsignment(app, c.id, 'dispatched');
     await moveConsignment(app, c.id, 'arrived');
   }
+  // Collected and checked on 30 November, inside the 72-hour window.
+  const settings = await app.prisma.demoSettings.findUniqueOrThrow({ where: { id: 1 } });
+  app.clock.set(
+    new Date(Date.parse('2026-11-30T15:30:00Z') - Number(settings.clockOffsetMs)).toISOString(),
+  );
   const p = await pickupOf('KEDAI_KOPI', DATE);
   const rahim = await app.as('rahim');
   expect((await rahim.post(`/api/pickups/${p.id}/collect`, { code: p.code })).status).toBe(200);
   refundsBeforeCheckSen = (await ah.get(`/api/shops/${KEDAI}/savings?month=2026-11`)).body
     .refundsSen;
 
-  const settings = await app.prisma.demoSettings.findUniqueOrThrow({ where: { id: 1 } });
-  app.clock.set(
-    new Date(Date.parse('2026-11-30T15:30:00Z') - Number(settings.clockOffsetMs)).toISOString(),
-  );
   const photo = await uploadPhoto(rahim, p.id);
   const cmAlloc = (await allocationOf('KEDAI_KOPI', 'CM')).id;
   const res = await rahim.post(`/api/pickups/${p.id}/delivery-check`, {

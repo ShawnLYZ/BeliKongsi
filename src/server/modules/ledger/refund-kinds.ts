@@ -4,6 +4,7 @@ export const REFUND_KINDS = [
   'refund_difference',
   'refund_dropped',
   'refund_failed',
+  'refund_late',
   'refund_round_cancelled',
   'refund_shortfall',
 ] as const;

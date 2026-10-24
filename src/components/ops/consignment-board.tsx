@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import type { ConsignmentView } from '@/lib/views/fulfilment';
 import { apiFetch } from '@/components/common/api-client';
 import { BUTTON_PRIMARY } from '@/components/common/controls';
+import { NewDateForm } from './new-date-form';
 import { type PartnerStatus, nextConsignmentStep } from '@/lib/consignment-steps';
 import { formatMyt, formatMytDate } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -110,6 +111,12 @@ export function ConsignmentBoard({ consignments }: { consignments: ConsignmentVi
                         >
                           {busy === c.consignmentId ? 'Saving…' : stepActionLabel(next)}
                         </button>
+                      ) : null}
+                      {c.status !== 'delivered' && c.status !== 'completed' ? (
+                        <NewDateForm
+                          endpoint={`/api/consignments/${c.consignmentId}/delay`}
+                          className="mt-1"
+                        />
                       ) : null}
                     </li>
                   );

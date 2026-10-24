@@ -111,6 +111,7 @@ enum ParticipationStatus {
   shorted
   received
   closed
+  cancelled_late
 }
 
 enum BaselineKind {
@@ -172,6 +173,7 @@ enum PostingKind {
   delivery_fee_to_partner
   refund_claim
   withdrawal
+  refund_late
 }
 
 enum SupplierOrderStatus {
@@ -201,6 +203,7 @@ enum ConsignmentStatus {
 enum PickupStatus {
   waiting
   ready
+  partly_ready
   out_for_delivery
   collected
   delivered
@@ -211,6 +214,7 @@ enum PickupStatus {
 enum CheckResult {
   all_received
   issues
+  not_checked
 }
 
 enum ClaimStatus {
@@ -307,6 +311,7 @@ model Shop {
   usualList            UsualList?
   autoApproveRule      AutoApproveRule?
   withdrawals          Withdrawal[]
+  lateDeliveries       LateDelivery[]
   baskets              WeeklyBasket[]
   payments             Payment[]
   participations       Participation[]
@@ -678,6 +683,9 @@ model Allocation {
   missing         Int
   consignmentId   String?             @map("consignment_id") @db.Uuid
   pickupId        String?             @map("pickup_id") @db.Uuid
+  collectionId    String?             @map("collection_id") @db.Uuid
+  collection      PickupCollection?   @relation(fields: [collectionId], references: [id])
+  cancelledLateAt DateTime?           @map("cancelled_late_at") @db.Timestamptz
   createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz
   checkLines      DeliveryCheckLine[]
   claimLines      ClaimLine[]
@@ -704,35 +712,70 @@ model Consignment {
 }
 
 model Pickup {
-  id                String          @id @default(uuid()) @db.Uuid
-  shopId            String          @map("shop_id") @db.Uuid
-  destinationType   DestinationType @map("destination_type")
-  pickupPointId     String?         @map("pickup_point_id") @db.Uuid
-  destinationKey    String          @map("destination_key")
-  deliveryDate      String          @map("delivery_date")
+  id                String             @id @default(uuid()) @db.Uuid
+  shopId            String             @map("shop_id") @db.Uuid
+  destinationType   DestinationType    @map("destination_type")
+  pickupPointId     String?            @map("pickup_point_id") @db.Uuid
+  destinationKey    String             @map("destination_key")
+  deliveryDate      String             @map("delivery_date")
   code              String
   status            PickupStatus
-  readyAt           DateTime?       @map("ready_at") @db.Timestamptz
-  collectedAt       DateTime?       @map("collected_at") @db.Timestamptz
-  collectedByUserId String?         @map("collected_by_user_id") @db.Uuid
-  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz
-  deliveryCheck     DeliveryCheck?
+  readyAt           DateTime?          @map("ready_at") @db.Timestamptz
+  collectedAt       DateTime?          @map("collected_at") @db.Timestamptz
+  collectedByUserId String?            @map("collected_by_user_id") @db.Uuid
+  createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  deliveryChecks    DeliveryCheck[]
   photos            Photo[]
+  collections       PickupCollection[]
 
   @@unique([shopId, destinationKey, deliveryDate])
   @@map("pickups")
 }
 
+model PickupCollection {
+  id                String         @id @default(uuid()) @db.Uuid
+  pickupId          String         @map("pickup_id") @db.Uuid
+  pickup            Pickup         @relation(fields: [pickupId], references: [id])
+  collectedAt       DateTime       @map("collected_at") @db.Timestamptz
+  collectedByUserId String?        @map("collected_by_user_id") @db.Uuid
+  /// 'code' | 'courier' | 'system'
+  method            String
+  allocations       Allocation[]
+  deliveryCheck     DeliveryCheck?
+
+  @@index([pickupId])
+  @@map("pickup_collections")
+}
+
+model LateDelivery {
+  id                 String    @id @default(uuid()) @db.Uuid
+  shopId             String    @map("shop_id") @db.Uuid
+  shop               Shop      @relation(fields: [shopId], references: [id])
+  destinationKey     String    @map("destination_key")
+  deliveryDate       String    @map("delivery_date")
+  originalExpectedAt DateTime  @map("original_expected_at") @db.Timestamptz
+  newExpectedAt      DateTime? @map("new_expected_at") @db.Timestamptz
+  reason             String?
+  detectedAt         DateTime  @map("detected_at") @db.Timestamptz
+
+  @@unique([shopId, destinationKey, deliveryDate])
+  @@map("late_deliveries")
+}
+
 model DeliveryCheck {
   id                String              @id @default(uuid()) @db.Uuid
-  pickupId          String              @unique @map("pickup_id") @db.Uuid
+  pickupId          String              @map("pickup_id") @db.Uuid
   pickup            Pickup              @relation(fields: [pickupId], references: [id])
+  /// One check per collection (O7, P1-8).
+  collectionId      String              @unique @map("collection_id") @db.Uuid
+  collection        PickupCollection    @relation(fields: [collectionId], references: [id])
   submittedByUserId String?             @map("submitted_by_user_id") @db.Uuid
   submittedAt       DateTime            @map("submitted_at") @db.Timestamptz
   result            CheckResult
   lines             DeliveryCheckLine[]
   claim             Claim?
 
+  @@index([pickupId])
   @@map("delivery_checks")
 }
 
@@ -819,6 +862,7 @@ model ApprovalRequest {
   decidedAt        DateTime?      @map("decided_at") @db.Timestamptz
   reason           String?
   expiresAt        DateTime?      @map("expires_at") @db.Timestamptz
+  overdueAt        DateTime?      @map("overdue_at") @db.Timestamptz
   createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz
 
   @@index([status, assigneeRole])

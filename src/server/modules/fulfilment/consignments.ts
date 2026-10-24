@@ -13,6 +13,7 @@ import { UUID } from '@/server/platform/ids';
 import { requireOps } from '@/server/platform/permissions';
 import { type TxContext, withTransaction } from '@/server/platform/tx';
 import { runBackgroundAutomation } from './background';
+import { completeConsignments } from './handover';
 import { historyEntry, lockDestinations } from './plan';
 import { refreshPickupReadiness } from './readiness';
 
@@ -104,6 +105,8 @@ export async function changeConsignmentStatus(
   if (status === 'arrived' || status === 'delivered') {
     await runBackgroundAutomation(ctx, pickupIds);
   }
+  // Goods all cancelled late before they arrived leave nothing to collect: it is done now.
+  if (status === 'arrived') await completeConsignments(ctx, [c.id]);
 }
 
 /**

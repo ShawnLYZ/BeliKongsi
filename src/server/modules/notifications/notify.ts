@@ -20,7 +20,8 @@ export type NotifyInput = {
 };
 
 const WHATSAPP_MAX = 300;
-const AMOUNT = /RM\s?\d/;
+/** An amount in text, such as "RM 50": staff notices and Ops reasons shown to staff must not have one. */
+export const AMOUNT = /RM\s?\d/;
 
 function validate(role: Role, m: NotificationMessage): void {
   if (m.whatsappText.length > WHATSAPP_MAX) {

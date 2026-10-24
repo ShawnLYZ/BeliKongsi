@@ -1,5 +1,11 @@
 import type { ConsignmentStatus, Pickup, RoundStatus } from '@/generated/prisma/client';
-import type { PickupLineView, PickupStatusLabel, PickupView } from '@/lib/views/pickups';
+import type {
+  PickupLateView,
+  PickupLineView,
+  PickupStatusLabel,
+  PickupView,
+} from '@/lib/views/pickups';
+import { resolveClock } from '@/server/adapters/clock';
 import { lockShop } from '@/server/modules/payments/fee';
 import type { Caller } from '@/server/platform/caller';
 import type { AppDeps } from '@/server/platform/deps';
@@ -9,9 +15,14 @@ import { requireShopAccess } from '@/server/platform/permissions';
 import { withTransaction, type TxContext } from '@/server/platform/tx';
 import { productImageUrl } from '@/server/modules/rounds/read';
 import { HANDED_OVER, handOverPickup, handoverFrom } from './handover';
+import { groupKeyOf } from './late';
 import { destinationKeyOf, lockDestinations } from './plan';
+import { COLLECTABLE, LIVE_ALLOCATION } from './readiness';
 
 const SHOP_ROLES = ['owner', 'staff'] as const;
+
+/** An owner may cancel a late item 72 hours after the original expected time (P1-7). */
+const LATE_CANCEL_WAIT_MS = 72 * 60 * 60 * 1000;
 
 /** Consignment statuses at which a waiting pickup's goods have left the hub (Ruling C). */
 const LEFT_HUB: ConsignmentStatus[] = [
@@ -28,9 +39,11 @@ const LEFT_SUPPLIER: RoundStatus[] = ['dispatched', 'at_hub', 'completed'];
 /**
  * The shop's owner or staff hand a pickup over with its code (PRD §10, story 76): a ready
  * pickup-point pickup becomes `collected`, a door pickup out for delivery becomes `delivered`.
- * Another shop's pickup is 404, a code that does not match is 422 `WRONG_CODE` (the pickup is
- * unchanged), and a pickup in any other state is 409 `NOT_READY`. Takes the shop lock, then the
- * destination's, so it never races a status move, readiness or a second collect.
+ * A `partly_ready` pickup hands over the part that is there, as its own collection, and waits for
+ * the rest; the same code works again then (P1-8). Another shop's pickup is 404, a code that does
+ * not match is 422 `WRONG_CODE` (the pickup is unchanged), and a pickup in any other state is 409
+ * `NOT_READY`. Takes the shop lock, then the destination's, so it never races a status move,
+ * readiness or a second collect.
  */
 export async function collectPickup(
   deps: AppDeps,
@@ -75,7 +88,7 @@ export async function handOverWithCode(
   if (input.code.replace(/\s+/g, '') !== pickup.code) {
     throw unprocessable('WRONG_CODE', 'That code does not match this pickup. Please check it.');
   }
-  if (pickup.status !== handoverFrom(pickup) || !(await handOverPickup(ctx, pickup))) {
+  if (!(await handOverPickup(ctx, pickup, { method: 'code' }))) {
     throw conflict(
       'NOT_READY',
       pickup.destinationType === 'door'
@@ -156,13 +169,39 @@ async function pickupViews(deps: AppDeps, shopId: string): Promise<PickupView[]>
     db.shop.findUniqueOrThrow({ where: { id: shopId }, select: { address: true } }),
   ]);
   const allocations = await db.allocation.findMany({
-    where: { pickupId: { in: pickups.map((p) => p.id) }, allocated: { gt: 0 } },
+    where: {
+      pickupId: { in: pickups.map((p) => p.id) },
+      allocated: { gt: 0 },
+      ...LIVE_ALLOCATION,
+    },
   });
   const claims = await db.claim.findMany({
     where: { deliveryCheck: { pickupId: { in: pickups.map((p) => p.id) } } },
-    select: { id: true, deliveryCheck: { select: { pickupId: true } } },
+    select: { id: true, deliveryCheck: { select: { pickupId: true, collectionId: true } } },
   });
   const claimOf = new Map(claims.map((c) => [c.deliveryCheck.pickupId, c.id]));
+  const claimOfCollection = new Map(claims.map((c) => [c.deliveryCheck.collectionId, c.id]));
+  const now = (await resolveClock(deps)).now();
+  const lateRows = await db.lateDelivery.findMany({ where: { shopId } });
+  const lateOf = (destinationKey: string, date: string): PickupLateView | null => {
+    const row = lateRows.find(
+      (r) => r.destinationKey === destinationKey && r.deliveryDate === date,
+    );
+    if (!row) return null;
+    const cancelFrom = new Date(row.originalExpectedAt.getTime() + LATE_CANCEL_WAIT_MS);
+    return {
+      originalExpectedAt: row.originalExpectedAt.toISOString(),
+      newExpectedAt: row.newExpectedAt?.toISOString() ?? null,
+      reason: row.reason,
+      cancelFrom: cancelFrom.toISOString(),
+      canCancelNow: now.getTime() >= cancelFrom.getTime(),
+    };
+  };
+  const collections = await db.pickupCollection.findMany({
+    where: { pickupId: { in: pickups.map((p) => p.id) } },
+    include: { deliveryCheck: { select: { id: true, result: true } } },
+    orderBy: [{ collectedAt: 'asc' }, { id: 'asc' }],
+  });
   const pictureOf = (product: Part['round']['product']) => ({
     category: product.category,
     imageUrl: productImageUrl(deps, product),
@@ -204,6 +243,8 @@ async function pickupViews(deps: AppDeps, shopId: string): Promise<PickupView[]>
   };
   const keptLine = (p: Part): PickupLineView => ({
     allocationId: null,
+    participationId: p.id,
+    readyToCollect: false,
     productName: p.round.product.name,
     unitName: p.round.product.unitName,
     quantity: p.quantity,
@@ -212,24 +253,42 @@ async function pickupViews(deps: AppDeps, shopId: string): Promise<PickupView[]>
   const byName = (a: PickupLineView, b: PickupLineView) =>
     a.productName.localeCompare(b.productName);
 
+  // The same rule as the hand-over: everything not collected yet from `ready` or out for
+  // delivery, only goods at the pickup point or delivered from `partly_ready`, else nothing.
+  const collectableNow = (p: Pickup, a: (typeof allocations)[number]): boolean => {
+    if (a.collectionId !== null) return false;
+    if (p.status === handoverFrom(p)) return true;
+    if (p.status !== 'partly_ready' || a.consignmentId === null) return false;
+    return COLLECTABLE[p.destinationType].includes(consignmentStatus.get(a.consignmentId)!);
+  };
+
   const views: PickupView[] = pickups.map((p) => {
     const own = allocations.filter((a) => a.pickupId === p.id);
-    const lines: PickupLineView[] = own.map((a) => {
+    const lineOf = (a: (typeof own)[number]): PickupLineView => {
       const part = partOf.get(a.participationId)!;
       return {
         allocationId: a.id,
+        participationId: a.participationId,
+        readyToCollect: collectableNow(p, a),
         productName: part.round.product.name,
         unitName: part.round.product.unitName,
         quantity: a.allocated,
         ...pictureOf(part.round.product),
       };
-    });
+    };
+    const lines = own.map(lineOf);
     const leftHub = own.some((a) => {
       const status = a.consignmentId ? consignmentStatus.get(a.consignmentId) : undefined;
       return status !== undefined && LEFT_HUB.includes(status);
     });
+    // Late while the rest is still to come; ready, out or handed over is no longer late.
+    const late = ['waiting', 'partly_ready'].includes(p.status)
+      ? lateOf(p.destinationKey, p.deliveryDate)
+      : null;
     return {
       pickupId: p.id,
+      groupKey: null,
+      late,
       destinationType: p.destinationType,
       ...place(p.destinationType, p.pickupPointId),
       deliveryDate: p.deliveryDate,
@@ -238,6 +297,19 @@ async function pickupViews(deps: AppDeps, shopId: string): Promise<PickupView[]>
       code: p.code,
       claimId: claimOf.get(p.id) ?? null,
       lines: lines.sort(byName),
+      collections: collections
+        .filter((c) => c.pickupId === p.id)
+        .map((c) => ({
+          collectionId: c.id,
+          collectedAt: c.collectedAt.toISOString(),
+          checked: c.deliveryCheck !== null,
+          checkResult: c.deliveryCheck?.result ?? null,
+          claimId: claimOfCollection.get(c.id) ?? null,
+          lines: own
+            .filter((a) => a.collectionId === c.id)
+            .map(lineOf)
+            .sort(byName),
+        })),
     };
   });
 
@@ -246,6 +318,10 @@ async function pickupViews(deps: AppDeps, shopId: string): Promise<PickupView[]>
     const allSent = parts.every((p) => LEFT_SUPPLIER.includes(p.round.status));
     views.push({
       pickupId: null,
+      groupKey: groupKeyOf({
+        deliveryDate: first.deliveryDate,
+        destinationKey: destinationKeyOf(first),
+      }),
       destinationType: first.destinationType,
       ...place(first.destinationType, first.pickupPointId),
       deliveryDate: first.deliveryDate,
@@ -254,11 +330,30 @@ async function pickupViews(deps: AppDeps, shopId: string): Promise<PickupView[]>
       code: null,
       claimId: null,
       lines: parts.map(keptLine).sort(byName),
+      collections: [],
+      late: lateOf(destinationKeyOf(first), first.deliveryDate),
     });
   }
 
   // Stable: pickups (by creation) before groups on the same date.
   return views.sort((a, b) => a.deliveryDate.localeCompare(b.deliveryDate));
+}
+
+/**
+ * The shop's group of goods not yet planned into a pickup (rounds not hub-checked yet), by its
+ * `groupKey`, for the owner's page about it; null when there is none (any more). Owner only: it
+ * leads to "Cancel late item".
+ */
+export async function shopPickupGroup(
+  deps: AppDeps,
+  caller: Caller,
+  shopId: string,
+  groupKey: string,
+): Promise<PickupView | null> {
+  requireShopAccess(caller, shopId, ['owner']);
+  if (!UUID.test(shopId)) throw notFound('Shop');
+  const views = await pickupViews(deps, shopId);
+  return views.find((v) => v.pickupId === null && v.groupKey === groupKey) ?? null;
 }
 
 /** Story 71's label for a planned pickup (Ruling C). */
@@ -268,6 +363,9 @@ function labelOf(p: Pickup, leftHub: boolean): PickupStatusLabel {
       return leftHub ? 'On the way' : 'At the hub';
     case 'ready':
       return 'Ready for pickup';
+    case 'partly_ready':
+      // A door shop has no pickup point: the part that arrived is with the driver.
+      return p.destinationType === 'door' ? 'Out for delivery' : 'Ready for pickup';
     case 'out_for_delivery':
       return 'Out for delivery';
     default:

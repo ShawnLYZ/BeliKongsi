@@ -1,9 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { seedId } from '../../prisma/seed/ids';
-import { runBackgroundAutomation } from '@/server/modules/fulfilment/background';
 import { closeRoundById } from '@/server/modules/rounds/close';
-import { systemCaller } from '@/server/platform/caller';
-import { withTransaction } from '@/server/platform/tx';
 import { createTestApp, type TestApp } from './helpers/app';
 import { expectNoMoneyFields } from './helpers/scans';
 import {
@@ -143,36 +140,54 @@ describe('Collecting at the pickup point', () => {
   });
 
   it('keeps the consignment arrived while another of its pickups is not collected', async () => {
+    // Background shops took their arrived goods at once (P1-8, even with rounds still to be
+    // hub-checked); Kedai Kopi's pickup is ready and not collected yet.
+    const kv = await consignmentFor(KV_IPOH);
+    const open = await app.prisma.allocation.count({
+      where: { consignmentId: kv.id, pickupId: p.id, collectionId: null },
+    });
+    expect(open).toBeGreaterThan(0);
+    expect(kv.status).toBe('arrived');
     const rahim = await app.as('rahim');
     expect((await rahim.post(`/api/pickups/${p.id}/collect`, { code: p.code })).status).toBe(200);
-    expect((await consignmentFor(KV_IPOH)).status).toBe('arrived');
+    expect((await consignmentFor(KV_IPOH)).status).toBe('completed');
   });
 
   it('completes a consignment whose last pickup a background shop collects', async () => {
+    // A fresh demo: the goods are hub-checked but the KV consignment has not arrived yet.
+    await app.close();
+    app = await createTestApp({ seed: 'demo' });
+    await toHubChecked(app, KEDAI_ROUNDS);
     const kv = await consignmentFor(KV_IPOH);
     const lines = await app.prisma.allocation.findMany({
       where: { consignmentId: kv.id, pickupId: { not: null } },
       select: { pickupId: true },
     });
     const ids = [...new Set(lines.map((l) => l.pickupId!))];
-    const bg = await app.prisma.pickup.findFirstOrThrow({
-      where: { id: { in: ids }, shopId: { not: KEDAI } },
-      orderBy: { id: 'asc' },
+    const pickups = await app.prisma.pickup.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, shopId: true },
     });
-    expect(
-      (await app.prisma.shop.findUniqueOrThrow({ where: { id: bg.shopId } })).isBackground,
-    ).toBe(true);
+    const bgShops = await app.prisma.shop.findMany({
+      where: { id: { in: pickups.map((x) => x.shopId) }, isBackground: true },
+      select: { id: true },
+    });
+    const background = pickups
+      .filter((x) => bgShops.some((b) => b.id === x.shopId))
+      .map((x) => x.id);
+    expect(background.length).toBeGreaterThan(0);
+    // Every real shop's pickup is done already, so the background shops' are the last ones.
     await app.prisma.pickup.updateMany({
-      where: { id: { in: ids.filter((id) => id !== bg.id) } },
+      where: { id: { in: ids.filter((id) => !background.includes(id)) } },
       data: { status: 'collected' },
     });
-    await app.prisma.pickup.update({ where: { id: bg.id }, data: { status: 'ready' } });
-    await withTransaction(app.deps, systemCaller('test'), (ctx) =>
-      runBackgroundAutomation(ctx, [bg.id]),
-    );
-    expect((await app.prisma.pickup.findUniqueOrThrow({ where: { id: bg.id } })).status).toBe(
-      'closed',
-    );
+    await moveConsignment(app, kv.id, 'dispatched');
+    await moveConsignment(app, kv.id, 'arrived');
+    expect(
+      await app.prisma.pickupCollection.count({
+        where: { pickupId: { in: background }, method: 'system' },
+      }),
+    ).toBeGreaterThanOrEqual(background.length);
     expect((await consignmentFor(KV_IPOH)).status).toBe('completed');
   });
 
@@ -275,7 +290,8 @@ describe('A line leaving active frees a waiting pickup (C4 gate 1)', () => {
       select: { id: true, roundId: true },
     });
     expect(others.length).toBeGreaterThan(0);
-    expect((await pickupOf('KEDAI_KOPI', DATE)).status).toBe('waiting');
+    // The condensed milk can be collected on its own (P1-8), but the pickup is not ready.
+    expect((await pickupOf('KEDAI_KOPI', DATE)).status).toBe('partly_ready');
     return others;
   }
 

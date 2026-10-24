@@ -52,6 +52,7 @@ describe('pickup tracker', () => {
     expect(canHandOver({ destinationType: 'pickup_point', status: 'waiting' })).toBe(false);
     expect(canHandOver({ destinationType: 'door', status: 'out_for_delivery' })).toBe(true);
     expect(canHandOver({ destinationType: 'door', status: 'ready' })).toBe(false);
+    expect(canHandOver({ destinationType: 'pickup_point', status: 'partly_ready' })).toBe(true);
     expect(isHandedOver({ status: 'collected' })).toBe(true);
     expect(isHandedOver({ status: 'ready' })).toBe(false);
   });

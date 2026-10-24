@@ -4,6 +4,7 @@ import { Money } from '@/components/common/money';
 import { SimulatedBadge } from '@/components/common/simulated-badge';
 import { formatMyt, formatMytDate, formatUnits } from '@/lib/format';
 import { HubCheckForm } from './hub-check-form';
+import { NewDateForm } from './new-date-form';
 import { LINK, orderStatusLabel } from './labels';
 
 /** Ops view of one supplier order, with the hub check once it is dispatched. */
@@ -63,6 +64,19 @@ export function SupplierOrderDetail({
           <dd>{order.expectedDispatchDate ? formatMytDate(order.expectedDispatchDate) : '—'}</dd>
         </div>
       </dl>
+
+      {order.status === 'confirmed' || order.status === 'dispatched' ? (
+        <section aria-labelledby="late-title" className="flex max-w-xl flex-col gap-3">
+          <h2 id="late-title" className="text-xl font-bold">
+            Late delivery
+          </h2>
+          <p className="text-base">
+            If these goods will not be ready on time, set the new date. Every shop in the order is
+            told.
+          </p>
+          <NewDateForm endpoint={`/api/supplier-orders/${order.supplierOrderId}/delay`} />
+        </section>
+      ) : null}
 
       <section aria-labelledby="hub-title" className="flex flex-col gap-3">
         <h2 id="hub-title" className="text-xl font-bold">

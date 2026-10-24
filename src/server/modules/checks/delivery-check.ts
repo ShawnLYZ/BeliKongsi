@@ -1,16 +1,22 @@
-import type { Allocation, Pickup, Prisma } from '@/generated/prisma/client';
+import type { Allocation, Pickup, PickupStatus, Prisma } from '@/generated/prisma/client';
 import { claimRefund } from '@/server/engine/claims';
 import { formatRM } from '@/lib/format';
 import { appendLog } from '@/server/modules/activity/log';
 import { createApproval } from '@/server/modules/approvals/approvals';
 import { approvalLink } from '@/server/modules/approvals/links';
 import { EXTENSIONS, MAX_PHOTO_BYTES } from '@/server/modules/checks/photos';
+import { completeConsignmentsOf, HANDED_OVER } from '@/server/modules/fulfilment/handover';
 import { lockDestinations } from '@/server/modules/fulfilment/plan';
-import { PICKUP_LINKS } from '@/server/modules/fulfilment/readiness';
+import {
+  linesStillComing,
+  LIVE_ALLOCATION,
+  PICKUP_LINKS,
+  UNCOLLECTED,
+} from '@/server/modules/fulfilment/readiness';
 import { emitEvent } from '@/server/modules/integration/events';
 import { notify, TEMPLATES } from '@/server/modules/notifications/notify';
 import { lockShop } from '@/server/modules/payments/fee';
-import { refreshRoundCompletion } from '@/server/modules/rounds/completion';
+import { refreshRoundCompletion, roundsOfPickup } from '@/server/modules/rounds/completion';
 import type { Caller } from '@/server/platform/caller';
 import type { AppDeps } from '@/server/platform/deps';
 import { AppError, conflict, notFound, unprocessable } from '@/server/platform/errors';
@@ -20,6 +26,11 @@ import { withTransaction, type TxContext } from '@/server/platform/tx';
 
 const SHOP_ROLES = ['owner', 'staff'] as const;
 const MAX_PHOTOS_PER_LINE = 3;
+const HOUR_MS = 60 * 60 * 1000;
+/** A collection can be checked for 72 hours; at exactly 72 hours the window is closed (P1-10). */
+export const CHECK_WINDOW_MS = 72 * HOUR_MS;
+/** The shop is reminded to check once 24 hours have passed (P1-10). */
+export const CHECK_REMINDER_MS = 24 * HOUR_MS;
 
 type LineInput = { allocationId: string; missing: number; damaged: number; photoIds: string[] };
 
@@ -36,22 +47,34 @@ const isUniqueViolation = (error: unknown) =>
 
 const checkExists = () => conflict('CHECK_EXISTS', 'This delivery has already been checked.');
 
+const windowClosed = () =>
+  conflict(
+    'CHECK_WINDOW_CLOSED',
+    'The 72 hours to check this delivery are over. It was closed as received, not checked.',
+  );
+
 const photoNotFound = () =>
   unprocessable('PHOTO_NOT_FOUND', 'One of the photos was not uploaded. Please add it again.');
 
 /**
- * The shop's owner or staff confirm what arrived (PRD §10-11, stories 77-81): "All received"
- * closes the pickup; problems (missing or damaged units, with up to 3 photos a line) open a claim
- * with an Ops approval and leave the pickup `checked`. Allocations not listed count as received.
- * One check per pickup: a second one, even a simultaneous double tap, is 409 `CHECK_EXISTS`.
+ * The shop's owner or staff confirm what arrived (PRD §10-11, stories 77-81), one collection at a
+ * time (O7, P1-8): "All received" closes its lines; problems (missing or damaged units, with up to
+ * 3 photos a line) open a claim with an Ops approval. Allocations not listed count as received;
+ * only the collection's own allocations can be listed. Without a `collectionId` the pickup's only
+ * unchecked collection is meant (422 `COLLECTION_REQUIRED` when there are several); another
+ * pickup's collection is 404. One check per collection: a second one, even a simultaneous double
+ * tap, is 409 `CHECK_EXISTS`. The pickup then settles (`settlePickup`).
  */
 export async function submitDeliveryCheck(
   deps: AppDeps,
   caller: Caller,
   pickupId: string,
-  input: DeliveryCheckInput,
+  input: DeliveryCheckInput & { collectionId?: string },
 ): Promise<DeliveryCheckResult> {
   if (!UUID.test(pickupId)) throw notFound('Pickup');
+  if (input.collectionId !== undefined && !UUID.test(input.collectionId)) {
+    throw notFound('Collection');
+  }
   try {
     return await withTransaction(deps, caller, async (ctx) => {
       const { tx } = ctx;
@@ -70,16 +93,15 @@ export async function submitDeliveryCheck(
       await lockDestinations(ctx, [head.destinationKey]);
       const pickup = await tx.pickup.findUniqueOrThrow({ where: { id: pickupId } });
 
-      if (await tx.deliveryCheck.findUnique({ where: { pickupId } })) throw checkExists();
-      if (pickup.status !== 'collected' && pickup.status !== 'delivered') {
-        throw conflict('NOT_COLLECTED', 'These goods have not been handed over yet.');
-      }
+      const collectionId = await collectionToCheck(ctx, pickupId, input.collectionId);
       const allocations = await tx.allocation.findMany({
-        where: { pickupId, allocated: { gt: 0 } },
+        where: { collectionId, allocated: { gt: 0 }, ...LIVE_ALLOCATION },
         orderBy: { id: 'asc' },
       });
-      if ('allReceived' in input) return recordAllReceived(ctx, pickup, allocations);
-      return recordWithLines(ctx, pickup, allocations, input.lines);
+      if ('allReceived' in input) {
+        return recordAllReceived(ctx, pickup, collectionId, allocations);
+      }
+      return recordWithLines(ctx, pickup, collectionId, allocations, input.lines);
     });
   } catch (error) {
     if (isUniqueViolation(error)) throw checkExists();
@@ -88,14 +110,100 @@ export async function submitDeliveryCheck(
 }
 
 /**
- * Records "All received" for a handed-over pickup, inside the caller's transaction (shop and
- * destination locks held): a check with every line fully received, participations `closed`, the
- * pickup `checked` then `closed`, and the rounds it carried refreshed. Shared by the shop's own
- * submit and by the background-shop simulation, which has no user and logs a reason.
+ * The collection a check is for: the one named, or else the pickup's only unchecked one. The 72
+ * hour window is tested first (R4), so a collection the job already closed as "not checked" also
+ * answers 409 `CHECK_WINDOW_CLOSED`, not `CHECK_EXISTS`.
+ */
+async function collectionToCheck(
+  ctx: TxContext,
+  pickupId: string,
+  named: string | undefined,
+): Promise<string> {
+  const collections = await ctx.tx.pickupCollection.findMany({
+    where: { pickupId },
+    select: { id: true, collectedAt: true, deliveryCheck: { select: { id: true } } },
+    orderBy: [{ collectedAt: 'asc' }, { id: 'asc' }],
+  });
+  const closed = (c: { collectedAt: Date }) =>
+    ctx.now.getTime() >= c.collectedAt.getTime() + CHECK_WINDOW_MS;
+  if (named !== undefined) {
+    const collection = collections.find((c) => c.id === named);
+    if (!collection) throw notFound('Collection');
+    if (closed(collection)) throw windowClosed();
+    if (collection.deliveryCheck) throw checkExists();
+    return collection.id;
+  }
+  const unchecked = collections.filter((c) => !c.deliveryCheck);
+  if (unchecked.length === 0) {
+    if (collections.some(closed)) throw windowClosed();
+    if (collections.length > 0) throw checkExists();
+    throw conflict('NOT_COLLECTED', 'These goods have not been handed over yet.');
+  }
+  if (unchecked.length > 1) {
+    if (unchecked.every(closed)) throw windowClosed();
+    throw unprocessable(
+      'COLLECTION_REQUIRED',
+      'These goods were collected in parts. Choose which part you are checking.',
+    );
+  }
+  if (closed(unchecked[0]!)) throw windowClosed();
+  return unchecked[0]!.id;
+}
+
+/**
+ * Moves a pickup on once its goods are all handed over (P1-8). With nothing left to collect, a
+ * pickup still waiting for goods (the rest was cancelled late) becomes `collected` (or
+ * `delivered`); once every collection is checked it is `checked` while a claim is undecided, else
+ * `closed`, and the rounds it carried are refreshed. Leaves it alone while goods are still to
+ * come, including those of a round for its place and date not hub-checked yet. In the caller's transaction (shop and destination locks held). Returns the pickup's status.
+ */
+export async function settlePickup(ctx: TxContext, pickupId: string): Promise<PickupStatus> {
+  const { tx, now } = ctx;
+  const pickup = await tx.pickup.findUniqueOrThrow({ where: { id: pickupId } });
+  if (pickup.status === 'closed') return pickup.status;
+  const left = await tx.allocation.count({ where: { pickupId, ...UNCOLLECTED } });
+  if (left > 0) return pickup.status;
+  // A round for this place and date not hub-checked yet still brings goods here (P1-8).
+  if (!HANDED_OVER.includes(pickup.status) && (await linesStillComing(tx, pickup)) > 0) {
+    return pickup.status;
+  }
+  let status = pickup.status;
+  if (!HANDED_OVER.includes(status)) {
+    status = pickup.destinationType === 'door' ? 'delivered' : 'collected';
+    await tx.pickup.update({
+      where: { id: pickupId },
+      data: { status, collectedAt: pickup.collectedAt ?? now },
+    });
+    // The rest was cancelled late: an arrived consignment with nothing left on it is done.
+    await completeConsignmentsOf(ctx, pickupId);
+  }
+  const unchecked = await tx.pickupCollection.count({
+    where: { pickupId, deliveryCheck: { is: null } },
+  });
+  if (unchecked > 0) return status;
+  const undecided = await tx.claim.count({
+    where: { deliveryCheck: { pickupId }, status: 'submitted' },
+  });
+  const settled = undecided > 0 ? 'checked' : 'closed';
+  if (settled !== status) {
+    await tx.pickup.update({ where: { id: pickupId }, data: { status: settled } });
+  }
+  if (settled === 'closed') {
+    await refreshRoundCompletion(ctx, await roundsOfPickup(ctx, pickupId));
+  }
+  return settled;
+}
+
+/**
+ * Records "All received" for a collection, inside the caller's transaction (shop and destination
+ * locks held): a check with every line fully received and those lines' participations `closed`,
+ * then the pickup settles (`settlePickup`). Shared by the shop's own submit and by the
+ * background-shop simulation, which has no user and logs a reason.
  */
 export async function recordAllReceived(
   ctx: TxContext,
   pickup: Pickup,
+  collectionId: string,
   allocations?: Allocation[],
   opts: { reason?: string } = {},
 ): Promise<DeliveryCheckResult> {
@@ -103,40 +211,77 @@ export async function recordAllReceived(
   const lines =
     allocations ??
     (await tx.allocation.findMany({
-      where: { pickupId: pickup.id, allocated: { gt: 0 } },
+      where: { collectionId, allocated: { gt: 0 }, ...LIVE_ALLOCATION },
       orderBy: { id: 'asc' },
     }));
-  const check = await createCheck(ctx, pickup, lines, 'all_received');
+  const check = await createCheck(ctx, pickup, collectionId, lines, 'all_received');
   const partIds = lines.map((a) => a.participationId);
-  await tx.pickup.updateMany({
-    where: { id: pickup.id, status: { in: ['collected', 'delivered'] } },
-    data: { status: 'checked' },
-  });
-  await tx.pickup.update({ where: { id: pickup.id }, data: { status: 'closed' } });
   await tx.participation.updateMany({
     where: { id: { in: partIds } },
     data: { status: 'closed', updatedAt: now },
   });
-  await logCheck(ctx, pickup, check.id, 'all_received', 'closed', null, opts.reason);
+  const status = await settlePickup(ctx, pickup.id);
+  await logCheck(ctx, pickup, check.id, 'all_received', status, null, opts.reason);
   await emitEvent(ctx, 'delivery.checked', {
     pickupId: pickup.id,
     shopId: pickup.shopId,
     result: 'all_received',
   });
-  const parts = await tx.participation.findMany({
-    where: { id: { in: partIds } },
-    select: { roundId: true },
-  });
-  await refreshRoundCompletion(
-    ctx,
-    parts.map((p) => p.roundId),
-  );
   return { checkId: check.id, result: 'all_received', claimId: null };
+}
+
+/**
+ * Closes a collection nobody checked within 72 hours as "received, not checked" (P1-10), inside the
+ * caller's transaction (shop and destination locks held; the caller has seen the window is over and
+ * the collection unchecked). A system check with no submitter and no lines, so its savings stay
+ * estimated and no claim exists. Its live participations close as for "All received", then the
+ * pickup settles (`settlePickup`).
+ */
+export async function recordNotChecked(
+  ctx: TxContext,
+  pickup: Pickup,
+  collectionId: string,
+): Promise<string> {
+  const { tx, now } = ctx;
+  const allocations = await tx.allocation.findMany({
+    where: { collectionId, allocated: { gt: 0 }, ...LIVE_ALLOCATION },
+    select: { participationId: true },
+  });
+  const check = await tx.deliveryCheck.create({
+    data: {
+      pickupId: pickup.id,
+      collectionId,
+      submittedByUserId: null,
+      submittedAt: now,
+      result: 'not_checked',
+    },
+  });
+  await tx.participation.updateMany({
+    where: { id: { in: allocations.map((a) => a.participationId) } },
+    data: { status: 'closed', updatedAt: now },
+  });
+  const status = await settlePickup(ctx, pickup.id);
+  await logCheck(
+    ctx,
+    pickup,
+    check.id,
+    'not_checked',
+    status,
+    null,
+    'Nobody checked the goods within 72 hours',
+  );
+  await emitEvent(ctx, 'delivery.checked', {
+    pickupId: pickup.id,
+    shopId: pickup.shopId,
+    result: 'not_checked',
+  });
+  return check.id;
 }
 
 async function createCheck(
   ctx: TxContext,
   pickup: Pickup,
+  collectionId: string,
   allocations: Allocation[],
   result: 'all_received' | 'issues',
   issues: Map<string, { missing: number; damaged: number }> = new Map(),
@@ -145,6 +290,7 @@ async function createCheck(
   const check = await tx.deliveryCheck.create({
     data: {
       pickupId: pickup.id,
+      collectionId,
       submittedByUserId: actor.type === 'person' ? actor.userId : null,
       submittedAt: now,
       result,
@@ -191,6 +337,7 @@ async function logCheck(
 async function recordWithLines(
   ctx: TxContext,
   pickup: Pickup,
+  collectionId: string,
   allocations: Allocation[],
   inputLines: LineInput[],
 ): Promise<DeliveryCheckResult> {
@@ -247,7 +394,7 @@ async function recordWithLines(
     issues.set(a.id, { missing: l.missing, damaged: l.damaged });
     refunds.set(a.id, refund.refundSen);
   }
-  if (issues.size === 0) return recordAllReceived(ctx, pickup, allocations);
+  if (issues.size === 0) return recordAllReceived(ctx, pickup, collectionId, allocations);
 
   // Photos must be this pickup's, not used on a line yet, and really stored (1 byte to 5 MB).
   const photoIds = inputLines.filter((l) => issues.has(l.allocationId)).flatMap((l) => l.photoIds);
@@ -275,7 +422,7 @@ async function recordWithLines(
     }
   }
 
-  const check = await createCheck(ctx, pickup, allocations, 'issues', issues);
+  const check = await createCheck(ctx, pickup, collectionId, allocations, 'issues', issues);
   await tx.participation.updateMany({
     where: { id: { in: allocations.map((a) => a.participationId) } },
     data: { status: 'received', updatedAt: now },
@@ -345,12 +492,9 @@ async function recordWithLines(
     } as Prisma.InputJsonValue,
   });
   await tx.claim.update({ where: { id: claim.id }, data: { approvalRequestId: approval.id } });
-  await tx.pickup.updateMany({
-    where: { id: pickup.id, status: { in: ['collected', 'delivered'] } },
-    data: { status: 'checked' },
-  });
+  const status = await settlePickup(ctx, pickup.id);
 
-  await logCheck(ctx, pickup, check.id, 'issues', 'checked', claim.id);
+  await logCheck(ctx, pickup, check.id, 'issues', status, claim.id);
   await appendLog(ctx, {
     action: 'claim.submitted',
     subjectType: 'claim',

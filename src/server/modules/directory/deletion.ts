@@ -24,13 +24,15 @@ export type DeletionRequestResult = DeletionBlockers & { approvalId: string; can
 
 // A round is finished once it has completed, been cancelled, failed to form or closed empty.
 const FINISHED_ROUNDS = ['completed', 'cancelled', 'failed', 'empty'] as const;
-// A participation is settled once it has been cancelled, dropped, refunded or closed.
+// A participation is settled once it has been cancelled (on time or late), dropped, refunded or
+// closed.
 const SETTLED_PARTICIPATIONS = [
   'cancelled',
   'dropped_price_limit',
   'refunded_failed',
   'refunded_round_cancelled',
   'closed',
+  'cancelled_late',
 ] as const;
 
 const ANONYMOUS_USER = 'Deleted user';

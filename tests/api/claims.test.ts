@@ -196,9 +196,15 @@ describe('Ops decides claims', () => {
 
   it('shows Ops the photos, the check, the hub record and the consignment history together (story 127)', async () => {
     // Every other shop on the same consignment collects too, so the consignment completes.
+    // Background shops already took their arrived goods (P1-8); the rest collect here.
     const cm = await allocationOf('KEDAI_KOPI', 'CM');
     const carried = await app.prisma.allocation.findMany({
-      where: { consignmentId: cm.consignmentId!, pickupId: { not: null, notIn: [p.id] } },
+      where: {
+        consignmentId: cm.consignmentId!,
+        pickupId: { not: null, notIn: [p.id] },
+        collectionId: null,
+        cancelledLateAt: null,
+      },
       select: { pickupId: true },
     });
     for (const id of new Set(carried.map((a) => a.pickupId!))) {

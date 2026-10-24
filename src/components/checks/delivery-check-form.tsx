@@ -4,7 +4,7 @@ import { useId, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { CheckCircle2 } from 'lucide-react';
-import type { PickupLineView, PickupView } from '@/lib/views/pickups';
+import type { PickupCollectionView, PickupLineView, PickupView } from '@/lib/views/pickups';
 import { ProductImage } from '@/components/catalogue/product-image';
 import { ApiError, apiFetch } from '@/components/common/api-client';
 import {
@@ -14,21 +14,25 @@ import {
   FIELD_LABEL,
 } from '@/components/common/controls';
 import { QuantityStepper } from '@/components/common/quantity-stepper';
-import { isHandedOver } from '@/components/pickups/steps';
-import { formatUnits } from '@/lib/format';
+import { formatMyt, formatUnits } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { PhotoPicker, type PickedPhoto } from './photo-picker';
 
 type Issue = { missing: number | null; damaged: number | null };
-type Result = { result: 'all_received' | 'issues'; claimId: string | null };
+type Result = { result: 'all_received' | 'issues' | 'not_checked'; claimId: string | null };
+
+/** The check window: 72 hours after the goods were handed over (P1-10). */
+const CHECK_WINDOW_MS = 72 * 60 * 60 * 1000;
 
 const count = (v: number | null | undefined) => v ?? 0;
 
 function DonePanel({
   result,
   claimHref,
+  partLabel,
 }: {
-  result: 'all_received' | 'issues';
+  partLabel: string | null;
+  result: 'all_received' | 'issues' | 'not_checked';
   claimHref: string | null;
 }) {
   return (
@@ -38,12 +42,15 @@ function DonePanel({
     >
       <p className="flex items-center gap-3 text-xl font-bold">
         <CheckCircle2 aria-hidden="true" className="text-primary size-8 shrink-0" />
-        Done
+        {result === 'not_checked' ? 'Received, not checked' : 'Done'}
+        {partLabel ? ` (${partLabel})` : ''}
       </p>
       <p className="text-base">
         {result === 'all_received'
           ? 'Thank you. You told us everything arrived.'
-          : 'Thank you. We sent your report to BeliKongsi. We will tell you when it has been reviewed.'}
+          : result === 'not_checked'
+            ? 'The 72 hours to check these goods have passed, so no claim can be sent for them.'
+            : 'Thank you. We sent your report to BeliKongsi. We will tell you when it has been reviewed.'}
       </p>
       {result === 'issues' && claimHref ? (
         <Link href={claimHref} className={cn(BUTTON_SECONDARY, 'self-start')}>
@@ -83,9 +90,15 @@ function LineHead({ line }: { line: PickupLineView }) {
  */
 export function DeliveryCheckForm({
   pickup,
+  collection,
+  partLabel,
   claimBase,
 }: {
   pickup: PickupView;
+  /** The hand-over this check is for (O7: one check per collection). */
+  collection: PickupCollectionView;
+  /** "Part 2" when the pickup was collected in several parts; null for a single collection. */
+  partLabel: string | null;
   /** The owner's claim screen path, such as `/owner/claims`; staff pass null (no claim page). */
   claimBase: string | null;
 }) {
@@ -102,23 +115,27 @@ export function DeliveryCheckForm({
   );
   const [result, setResult] = useState<Result | null>(null);
 
-  if (!isHandedOver(pickup) || !pickup.pickupId) return null;
+  if (!pickup.pickupId) return null;
   const pickupId = pickup.pickupId;
-  const lines = pickup.lines.filter((l) => l.allocationId !== null);
+  const lines = collection.lines.filter((l) => l.allocationId !== null);
+  const deadline = new Date(new Date(collection.collectedAt).getTime() + CHECK_WINDOW_MS);
+  const title = partLabel ? `Check your goods (${partLabel})` : 'Check your goods';
 
   if (result) {
     return (
       <DonePanel
         result={result.result}
         claimHref={result.claimId ? claimHref(result.claimId) : null}
+        partLabel={partLabel}
       />
     );
   }
-  if (pickup.status === 'checked' || pickup.status === 'closed') {
+  if (collection.checked) {
     return (
       <DonePanel
-        result={pickup.claimId ? 'issues' : 'all_received'}
-        claimHref={pickup.claimId ? claimHref(pickup.claimId) : null}
+        result={collection.checkResult ?? (collection.claimId ? 'issues' : 'all_received')}
+        claimHref={collection.claimId ? claimHref(collection.claimId) : null}
+        partLabel={partLabel}
       />
     );
   }
@@ -130,7 +147,7 @@ export function DeliveryCheckForm({
     try {
       const res = await apiFetch<Result>(`/api/pickups/${pickupId}/delivery-check`, {
         method: 'POST',
-        body,
+        body: { ...(body as object), collectionId: collection.collectionId },
         quiet: true,
       });
       setResult(res);
@@ -140,7 +157,10 @@ export function DeliveryCheckForm({
         const allocationId = (e.details as { allocationId?: string } | undefined)?.allocationId;
         if (allocationId) setLineError({ allocationId, message: e.message });
         else setError(e.message);
-      } else if (e instanceof ApiError && e.code === 'CHECK_EXISTS') {
+      } else if (
+        e instanceof ApiError &&
+        (e.code === 'CHECK_EXISTS' || e.code === 'CHECK_WINDOW_CLOSED')
+      ) {
         setError(e.message);
         router.refresh();
       } else {
@@ -198,9 +218,13 @@ export function DeliveryCheckForm({
     return (
       <section aria-labelledby={`${id}-title`} className="flex flex-col gap-4">
         <h2 id={`${id}-title`} className="text-xl font-bold">
-          Check your goods
+          {title}
         </h2>
         <p className="text-base">Open the boxes and count. Did everything arrive in good shape?</p>
+        <p className="text-muted-foreground text-base">
+          Check by <time dateTime={deadline.toISOString()}>{formatMyt(deadline)}</time>. After that
+          these goods count as received, not checked.
+        </p>
         <ul className="bg-card flex flex-col divide-y rounded-2xl border">
           {lines.map((l) => (
             <li key={l.allocationId} className="p-3">
@@ -244,7 +268,7 @@ export function DeliveryCheckForm({
       }}
     >
       <h2 id={`${id}-title`} className="text-xl font-bold">
-        Report a problem
+        Report a problem{partLabel ? ` (${partLabel})` : ''}
       </h2>
       <p className="text-base">
         For each product, say how many did not arrive and how many came damaged. Leave the rest at
@@ -328,5 +352,32 @@ export function DeliveryCheckForm({
         Back
       </button>
     </form>
+  );
+}
+
+/**
+ * One delivery check per collection (O7, P1-8): a pickup collected in two parts shows two checks,
+ * each with its own goods, "All received" and "Report a problem".
+ */
+export function DeliveryChecks({
+  pickup,
+  claimBase,
+}: {
+  pickup: PickupView;
+  claimBase: string | null;
+}) {
+  const many = pickup.collections.length > 1;
+  return (
+    <>
+      {pickup.collections.map((c, i) => (
+        <DeliveryCheckForm
+          key={c.collectionId}
+          pickup={pickup}
+          collection={c}
+          partLabel={many ? `Part ${i + 1}` : null}
+          claimBase={claimBase}
+        />
+      ))}
+    </>
   );
 }

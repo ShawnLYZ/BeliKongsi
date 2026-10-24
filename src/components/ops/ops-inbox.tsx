@@ -10,6 +10,7 @@ import { formatMyt } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { ApprovalPanel, evidenceOf, moneyCheckPassed } from './approval-panel';
 import { CheckMark } from './check-mark';
+import { OverdueBadge } from './overdue-badge';
 import { DeletionPanel } from './deletion-panel';
 import { deletionEvidenceOf, openItemCount } from './deletion-evidence';
 import { LINK, TABLE, TABLE_WRAP, TD, TD_NUM, TH, TH_NUM } from './labels';
@@ -94,6 +95,7 @@ export function OpsInbox({ initialItems }: { initialItems: ApprovalView[] }) {
                               {e.supplierName}
                             </span>
                           </button>
+                          <OverdueBadge item={o} />
                         </td>
                         <td className={TD_NUM}>
                           {o.amountSen === null ? '—' : <Money sen={o.amountSen} />}
@@ -154,6 +156,7 @@ export function OpsInbox({ initialItems }: { initialItems: ApprovalView[] }) {
                           >
                             {d.summary}
                           </button>
+                          <OverdueBadge item={d} />
                         </td>
                         <td className={TD_NUM}>
                           <Money sen={e.balanceSen} />
@@ -205,6 +208,7 @@ export function OpsInbox({ initialItems }: { initialItems: ApprovalView[] }) {
                         >
                           {c.summary}
                         </Link>
+                        <OverdueBadge item={c} />
                       </td>
                       <td className={TD_NUM}>
                         {c.amountSen === null ? '—' : <Money sen={c.amountSen} />}

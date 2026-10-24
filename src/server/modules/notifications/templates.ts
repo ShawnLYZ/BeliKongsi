@@ -215,6 +215,79 @@ export const TEMPLATES = defineTemplates({
     const text = `Ready at ${data.placeName} (${data.openingHours}). Pickup code ${formatPickupCode(data.code)}.`;
     return () => ({ title: 'Ready for pickup', body: text, whatsappText: text });
   },
+  // Owner and staff: some of a pickup's goods can be collected before the rest (P1-8). A door
+  // delivery has no place or hours.
+  'pickup.partly_ready': (data: { placeName?: string; openingHours?: string; code: string }) => {
+    const code = formatPickupCode(data.code);
+    const text = data.placeName
+      ? `Part of your goods is ready at ${data.placeName} (${data.openingHours}). Pickup code ${code}.`
+      : `Part of your goods was delivered to your shop. Pickup code ${code}.`;
+    return () => ({ title: 'Partly ready', body: text, whatsappText: text });
+  },
+  // Owner and staff: goods have waited at the pickup point for 1 and 3 days (P1-9).
+  'pickup.uncollected': (data: { placeName: string; openingHours: string; code: string }) => {
+    const text = `Your goods are waiting at ${data.placeName} (${data.openingHours}). Pickup code ${formatPickupCode(data.code)}.`;
+    return () => ({ title: 'Your goods are waiting', body: text, whatsappText: text });
+  },
+  // Ops only: goods have waited at a pickup point for 7 days (P1-9).
+  'ops.goods_uncollected': (data: { shopName: string; placeName: string }) => {
+    const text = `Goods uncollected for 7 days: ${data.shopName} at ${data.placeName}.`;
+    return () => ({ title: 'Goods uncollected', body: text, whatsappText: text });
+  },
+  // Owner and staff: 24 hours after a collection, a check is still missing (P1-10).
+  'delivery.check_reminder': (data: { date: Date | string }) => {
+    const text = `Please check the goods you received on ${formatMytDate(data.date)}: tap to confirm or report a problem.`;
+    return () => ({ title: 'Please check your goods', body: text, whatsappText: text });
+  },
+  // Supplier only: a confirmation has waited 12 hours (P1-11).
+  'supplier.confirm_reminder': (data: {
+    quantity: number;
+    unitName: string;
+    shortName: string;
+  }) => {
+    const text = `Reminder: please confirm the BeliKongsi order for ${formatUnits(data.quantity, data.unitName)} of ${data.shortName}.`;
+    return () => ({ title: 'Please confirm the order', body: text, whatsappText: text });
+  },
+  // Ops only: a supplier has not confirmed an order after 12 hours (P1-11).
+  'ops.supplier_unconfirmed': (data: { supplierName: string; shortName: string }) => {
+    const text = `${data.supplierName} hasn't confirmed the ${data.shortName} order after 12 hours.`;
+    return () => ({ title: 'Supplier has not confirmed', body: text, whatsappText: text });
+  },
+  // Ops only: an Ops approval has waited 12 hours (P1-11). The summary is shown as it is; only
+  // the WhatsApp text is shortened to fit, like the reason of a new date.
+  'ops.approval_overdue': (data: { summary: string }) => {
+    const prefix = 'Overdue approval: ';
+    const room = 300 - prefix.length - 1;
+    const short =
+      data.summary.length > room
+        ? `${data.summary.slice(0, Math.max(room, 1) - 1).trimEnd()}…`
+        : data.summary;
+    return () => ({
+      title: 'Overdue approval',
+      body: `${prefix}${data.summary}.`,
+      whatsappText: `${prefix}${short}.`,
+    });
+  },
+  // Ops only: an order was not dispatched by the end of its required dispatch date (P1-11).
+  'ops.not_dispatched': (data: {
+    quantity: number;
+    unitName: string;
+    shortName: string;
+    supplierName: string;
+    dueDate: string;
+  }) => {
+    const text = `Not dispatched yet: ${formatUnits(data.quantity, data.unitName)} of ${data.shortName} from ${data.supplierName} (due ${formatMytDate(data.dueDate)}).`;
+    return () => ({ title: 'Order not dispatched', body: text, whatsappText: text });
+  },
+  // Ops only: a dispatched order has no hub check by the end of its expected hub date (P1-11).
+  'ops.hub_check_overdue': (data: {
+    shortName: string;
+    supplierName: string;
+    expectedDate: string;
+  }) => {
+    const text = `Hub check overdue: ${data.shortName} from ${data.supplierName} (expected ${formatMytDate(data.expectedDate)}).`;
+    return () => ({ title: 'Hub check overdue', body: text, whatsappText: text });
+  },
   // Owner and staff: a door pickup's goods are on the way today.
   'pickup.out_for_delivery': (data: { code: string }) => {
     const text = `Your goods are out for delivery today. Have code ${formatPickupCode(data.code)} ready.`;
@@ -295,6 +368,34 @@ export const TEMPLATES = defineTemplates({
   'ops.claim_needed': (data: { shopName: string; totalSen: number }) => {
     const text = `Claim awaiting decision: ${data.shopName}, ${formatRM(data.totalSen)}.`;
     return () => ({ title: 'Claim awaiting decision', body: text, whatsappText: text });
+  },
+  // Owner and staff: the goods missed their expected ready time. No amounts.
+  'delivery.late': (data: { date: string }) => {
+    const text = `Your goods for ${formatMytDate(data.date)} are running late. We'll tell you the new date.`;
+    return () => ({ title: 'Running late', body: text, whatsappText: text });
+  },
+  // Owner only: a late item was cancelled for a full refund, with everything that went back.
+  'delivery.late_cancelled': (data: {
+    quantity: number;
+    unitName: string;
+    shortName: string;
+    refundSen: number;
+  }) => {
+    const text = `Cancelled a late item: ${formatUnits(data.quantity, data.unitName)} of ${data.shortName}. ${formatRM(data.refundSen)} is back in your balance.`;
+    return () => ({ title: 'Late item cancelled', body: text, whatsappText: text });
+  },
+  // Owner and staff: Ops set a new date, with the reason. No amounts.
+  'delivery.new_date': (data: { newDate: string; reason: string }) => {
+    const reason = data.reason.trim().replace(/[\s.,;:!?]+$/, '');
+    const prefix = `New date for your goods: ${formatMytDate(data.newDate)}. Reason: `;
+    const room = 300 - prefix.length - 1;
+    const short =
+      reason.length > room ? `${reason.slice(0, Math.max(room, 1) - 1).trimEnd()}…` : reason;
+    return () => ({
+      title: 'New delivery date',
+      body: `${prefix}${reason}.`,
+      whatsappText: `${prefix}${short}.`,
+    });
   },
   // Owner only: Ops did not approve the deletion request. An approval deletes the owner's notices.
   'deletion.decided': (data: { reason: string }) => {

@@ -49,12 +49,16 @@ export async function withAllocationAndCheck<T extends { id: string }>(
   return rows.map((r) => ({ ...r, allocation: byParticipation.get(r.id) ?? null }));
 }
 
-/** Statuses of lines that were refunded before any goods came: nothing was saved on them. */
+/**
+ * Statuses of lines refunded in full, so no goods were kept: cancelled or refunded before any
+ * goods came, or cancelled late for a full refund (P1-7). Nothing was saved on them.
+ */
 export const REFUNDED: ParticipationStatus[] = [
   'cancelled',
   'dropped_price_limit',
   'refunded_failed',
   'refunded_round_cancelled',
+  'cancelled_late',
 ];
 
 /** What the delivery check found for a line, or null while it has not been checked. */
@@ -83,6 +87,8 @@ export function participationSavingsView(
 /** The engine's result for the line, with the units it counted; null as `participationSavingsView`. */
 function participationSavingsResult(p: ParticipationWithAllocationAndCheck): SavingsResult | null {
   if (p.finalAllInSen === null || REFUNDED.includes(p.status)) return null;
+  // A collection closed as "received, not checked" (P1-10) has no check lines, so `check` is
+  // undefined: its savings stay estimated and are never shown as verified.
   const check = p.allocation?.checkLines[0];
   return participationSavings({
     baselineSen: p.baselineSen,
@@ -231,7 +237,12 @@ export async function monthlySavings(
     withAllocationAndCheck(prisma, checkedRows),
     withAllocationAndCheck(prisma, closedRows),
     prisma.allocation.findMany({
-      where: { participationId: { in: hubRows.map((r) => r.id) }, allocated: { gt: 0 } },
+      // A line cancelled late (P1-7) was refunded in full, its fee included.
+      where: {
+        participationId: { in: hubRows.map((r) => r.id) },
+        allocated: { gt: 0 },
+        cancelledLateAt: null,
+      },
       select: { participationId: true, allocated: true },
     }),
   ]);

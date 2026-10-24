@@ -113,7 +113,12 @@ async function paidEqualsRefundsPlusAllocated(db: Db): Promise<Failure[]> {
         COALESCE((SELECT SUM(lp.amount_sen) FROM ledger_postings lp
           JOIN ledger_accounts h ON h.id = lp.from_account_id
           WHERE lp.participation_id = p.id AND h.key = 'round_hold:' || p.round_id::text
-            AND lp.kind::text LIKE 'refund\_%'), 0)::bigint AS refunds,
+            AND lp.kind::text LIKE 'refund\_%'), 0)::bigint
+          -- A late cancellation after the hub check is paid from claims expense, like a claim.
+          + COALESCE((SELECT SUM(lp.amount_sen) FROM ledger_postings lp
+          JOIN ledger_accounts c ON c.id = lp.from_account_id
+          WHERE lp.participation_id = p.id AND c.key = 'claims_expense'
+            AND lp.kind::text = 'refund_late'), 0)::bigint AS refunds,
         (CASE
           WHEN p.status = 'active' THEN p.paid_sen::bigint
           WHEN p.status = 'kept' THEN COALESCE(p.final_all_in_sen, 0)::bigint * p.quantity
@@ -135,7 +140,7 @@ async function paidEqualsRefundsPlusAllocated(db: Db): Promise<Failure[]> {
 async function keptWithinLimits(db: Db): Promise<Failure[]> {
   const rows = await db.$queryRaw<{ id: string; round_id: string; final: number; lim: number }[]>`
     SELECT id, round_id, final_all_in_sen AS final, price_limit_sen AS lim FROM participations
-    WHERE status IN ('kept', 'allocated', 'shorted', 'received', 'closed')
+    WHERE status IN ('kept', 'allocated', 'shorted', 'received', 'closed', 'cancelled_late')
       AND price_limit_sen IS NOT NULL AND final_all_in_sen > price_limit_sen
     ORDER BY id`;
   return rows.map((r) => ({

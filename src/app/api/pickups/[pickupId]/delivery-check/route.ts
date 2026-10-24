@@ -10,9 +10,11 @@ const line = z.object({
   damaged: z.number().int().min(0).max(100000),
   photoIds: z.array(z.string().max(64)).max(20),
 });
+// Which collection is checked (P1-8); optional while the pickup has only one unchecked.
+const collectionId = z.string().max(64).optional();
 const body = z.union([
-  z.object({ allReceived: z.literal(true) }),
-  z.object({ lines: z.array(line).min(1).max(100) }),
+  z.object({ allReceived: z.literal(true), collectionId }),
+  z.object({ lines: z.array(line).min(1).max(100), collectionId }),
 ]);
 
 export const POST = route(

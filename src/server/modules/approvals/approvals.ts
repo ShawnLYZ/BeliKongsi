@@ -53,6 +53,8 @@ export type ApprovalView = {
   proposedBy: { type: ActorType; name: string | null };
   status: ApprovalStatus;
   createdAt: string;
+  /** When Ops were told this request had waited 12 hours, else null. */
+  overdueAt: string | null;
   link: string;
 };
 
@@ -145,6 +147,7 @@ async function toViews(
     },
     status: r.status,
     createdAt: r.createdAt.toISOString(),
+    overdueAt: r.overdueAt?.toISOString() ?? null,
     link: approvalLink(r.type, r.subjectId, r.id),
   }));
 }
