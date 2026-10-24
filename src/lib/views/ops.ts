@@ -84,3 +84,17 @@ export interface MoneyOverview {
   partnerCashSen: number;
   checks: OpsMoneyCheck[];
 }
+
+/** The five §27 metrics. A rate or median is null (shown as a dash) until there is data. */
+export interface ImpactView {
+  timeToApprove: { medianMinutes: number | null; p90Minutes: number | null; samples: number };
+  basketApprovalRate: { approved: number; drafted: number; rate: number | null };
+  aiLinesAcceptedUnchanged: { accepted: number; suggested: number; rate: number | null };
+  claimRate: { claimedUnits: number; deliveredUnits: number; rate: number | null };
+  supplierReliability: {
+    supplierId: string;
+    supplierName: string;
+    medianConfirmationHours: number | null;
+    goodUnitsRate: number | null;
+  }[];
+}

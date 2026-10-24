@@ -115,3 +115,30 @@ Result: **17/20 correct, 0 invented ids, 2 errors** - does not qualify (bar: at 
 | order-20 | pass   | -                                              | CM x6; OIL x2; EGG_A x10; COFFEE x1; CUPS x2                |
 
 <!-- /run:gemini-3.1-flash-lite -->
+
+## Invoice photos
+
+Ten fictional supplier invoices (`tests/fixtures/ai-accuracy/invoices/invoice-01.png` to `invoice-10.png`, 1,200 x 1,600) are read through the production `readOrderImage` and prompt, with the same catalogue as the text run. `pnpm tsx scripts/make-invoice-fixtures.ts` renders them with Playwright: each has a "... Contoh" letterhead, a fictional phone number, 3 to 8 catalogue items named in mixed Malay, Chinese and English with mixed units, and prices. Invoices 04 and 07 are rotated about 2 degrees and invoice 09 is low-contrast. Run `pnpm ai:accuracy -- --photos --model <name>` (live). The spec sets no pass mark for photos; if fewer than 8 of 10 are fully correct, the README notes it under Known limitations. These are clean renders, not real camera photos, so the result is an upper bound for real phone shots.
+
+<!-- run:photos-gemini-3.5-flash-lite -->
+
+## Invoice photos: gemini-3.5-flash-lite
+
+Date: 24 Oct 2026, 18:05 MYT
+
+Result: **10/10 correct, 0 invented ids, 0 errors** - meets the 8/10 marker (the spec sets no pass mark for photos; 8/10 is the level below which the README notes the limitation).
+
+| Invoice    | Result | Problems | Model read                                          |
+| ---------- | ------ | -------- | --------------------------------------------------- |
+| invoice-01 | pass   | -        | CM x5; OIL x3; FLOUR x2                             |
+| invoice-02 | pass   | -        | CM x4; COFFEE x2; TEA x1; OIL x2                    |
+| invoice-03 | pass   | -        | EM x3; BAGS x2; CONT x1                             |
+| invoice-04 | pass   | -        | EM x2; EGG_B x5; KRAFT x1; CUPS x3                  |
+| invoice-05 | pass   | -        | CM x3; OIL x2; FLOUR x1; COFFEE x1; TEA x2          |
+| invoice-06 | pass   | -        | CONT x2; BAGS x1; EGG_A x4; EM x2                   |
+| invoice-07 | pass   | -        | CM x4; OIL x2; EGG_B x6; TEA x1                     |
+| invoice-08 | pass   | -        | FLOUR x8; CM x2; EGG_A x8; OIL x4; EM x3; COFFEE x1 |
+| invoice-09 | pass   | -        | TEA x2; COFFEE x3; CUPS x2; KRAFT x1                |
+| invoice-10 | pass   | -        | CM x2; EGG_B x5; EM x3; OIL x1                      |
+
+<!-- /run:photos-gemini-3.5-flash-lite -->

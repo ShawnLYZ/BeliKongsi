@@ -1,0 +1,21 @@
+{
+  "id": "invoice-07",
+  "expected": [
+    {
+      "productKey": "CM",
+      "quantity": 4
+    },
+    {
+      "productKey": "OIL",
+      "quantity": 2
+    },
+    {
+      "productKey": "EGG_B",
+      "quantity": 6
+    },
+    {
+      "productKey": "TEA",
+      "quantity": 1
+    }
+  ]
+}

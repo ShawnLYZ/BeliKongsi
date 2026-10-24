@@ -42,6 +42,20 @@ describe('Gemini order reader', () => {
     expect(result.ignoredText).toEqual(['Hi boss']);
   });
 
+  it('sends an invoice photo as an inline image with no text, and reads the answer like text', async () => {
+    const generate = vi.fn<(req: GenerateRequest) => Promise<string>>(async () => VALID);
+    const r = createGeminiOrderReader({ apiKey: 'k', model: 'm', generate });
+    const result = await r.readOrderImage({
+      image: { bytes: new Uint8Array([0xff, 0xd8, 0xff]), mimeType: 'image/jpeg' },
+      catalogue: [],
+    });
+    expect(generate.mock.calls[0]![0]).toMatchObject({
+      text: '',
+      image: { mimeType: 'image/jpeg', data: '/9j/' },
+    });
+    expect(result.lines.map((l) => l.quantity)).toEqual([6]);
+  });
+
   it('gives up as AI unavailable after a second failure', async () => {
     const generate = vi.fn().mockRejectedValue(Object.assign(new Error('down'), { status: 503 }));
     const { reader: r } = reader(generate);

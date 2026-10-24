@@ -130,6 +130,18 @@ export function createGeminiOrderReader(opts: {
         toReadResult,
       );
     },
+    async readOrderImage({ image, catalogue }) {
+      return call(
+        {
+          model: opts.model,
+          prompt: buildPrompt(catalogue),
+          text: '',
+          image: { mimeType: image.mimeType, data: Buffer.from(image.bytes).toString('base64') },
+          responseJsonSchema: READ_RESULT_JSON_SCHEMA,
+        },
+        toReadResult,
+      );
+    },
     async readPriceList({ text: pasted, image, products }) {
       return call(
         {

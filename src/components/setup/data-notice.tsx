@@ -29,7 +29,9 @@ export function DataNotice() {
           <strong>Your pasted order:</strong> phone numbers, email addresses and IC numbers are
           removed before the AI sees the text, so please leave out people&apos;s names. We keep that
           cleaned text with the AI&apos;s suggestions as a record. The AI only suggests: nothing
-          goes on your usual list until you confirm.
+          goes on your usual list until you confirm. If you use a photo, it is sent to our AI
+          provider so it can be read, and BeliKongsi does not keep it. Cover names and phone numbers
+          before you take the photo.
         </li>
         <li>
           <strong>How to stop:</strong> you can stop at any step. Later you can change or empty your

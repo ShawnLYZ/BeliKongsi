@@ -58,6 +58,8 @@ export interface PriceListImage {
 export interface OrderReader {
   readonly model: string;
   readOrderText(i: { text: string; catalogue: CatalogueEntry[] }): Promise<ReadResult>;
+  /** Reads an order from a photo of an old invoice. The photo is sent to the model and never stored. */
+  readOrderImage(i: { image: PriceListImage; catalogue: CatalogueEntry[] }): Promise<ReadResult>;
   /** Reads a supplier's price list from (redacted) text, a photo, or both. */
   readPriceList(i: {
     text?: string;

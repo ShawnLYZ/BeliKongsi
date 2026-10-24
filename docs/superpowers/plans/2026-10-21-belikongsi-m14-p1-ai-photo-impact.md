@@ -45,6 +45,16 @@
   - `AiSuggestionRun.changeSummary`, `WeeklyBasket.firstOpenedAt`.
 - [ ] **Step 3:** Commit any plan edits.
 
+**Re-sync notes (2026-10-24):**
+
+- `OrderReader` has no `readOrderImage` yet (it has `readOrderText` and `readPriceList`). Gemini's injectable `generate` already takes an optional `image` (M13), so Task 1 only adds the method.
+- `validateLines` in `usual-list/parse.ts` is private, and `decodeImage` (with `looksLike`) in `catalogue/price-list.ts` is private. Task 1 shares them rather than copying.
+- The data notice exists only in setup (`DataNotice`); settings has none. Only setup step 1 (`paste-step.tsx`) has a paste flow; the usual-list page does not.
+- The test app has no `.data/storage-test` or `listFilesRecursively`: its local storage is a temp dir at `app.deps.env.LOCAL_STORAGE_DIR`.
+- The demo seed also pays Gerai's and Kafe's baskets for the history week, so Task 3's known-week counts are 5, not 3.
+- `changeSummary` is also written by price-list imports, with a different shape, so Task 3 filters by run kind.
+- All other consumed names match: `parseUsualListText`, `createGeminiOrderReader`, `enforceRateLimit(deps, bucket, limit, windowMs)`, `AiSuggestionRun.changeSummary` (`{ acceptedUnchanged, changed, added, removed }`) and `WeeklyBasket.firstOpenedAt`.
+
 ---
 
 ### Task 1: Invoice photo → usual list (P1-14)
@@ -53,25 +63,35 @@
 
 - Create: `src/app/api/shops/[shopId]/usual-list/parse-photo/route.ts`, `src/components/setup/invoice-photo-picker.tsx`
 - Modify:
-  - `src/server/adapters/ai/types.ts`, `gemini.ts`, `fake.ts`: add `readOrderImage(i: { image: { bytes: Uint8Array; mimeType: string }; catalogue: CatalogueEntry[] }): Promise<ReadResult>`.
-  - `src/server/modules/usual-list/parse.ts`: add `parseUsualListPhoto`, sharing validation with the text path.
-  - Prisma enum `AiRunKind` += `usual_list_photo` (migration).
-  - The data notice text in setup and settings.
+  - `src/server/adapters/ai/types.ts`, `gemini.ts`, `fake.ts`: add `readOrderImage(i: { image: PriceListImage; catalogue: CatalogueEntry[] }): Promise<ReadResult>` to `OrderReader` (`PriceListImage` is the existing `{ bytes: Uint8Array; mimeType: string }`).
+    - `gemini.ts`: call the existing `call` helper with `buildPrompt(catalogue)`, empty `text`, the image as base64 and `READ_RESULT_JSON_SCHEMA`, parsed by `toReadResult`. The injectable `generate` already carries an optional image.
+    - `fake.ts`: record the call in `received` and look the answer up in `fixtures` by the marker `describePriceListInput({ image })` (`[image <mime> <n> bytes]`); unknown input reads as no lines. Update the `received` comment.
+  - `src/server/modules/usual-list/parse.ts`: add `parseUsualListPhoto`, sharing `validateLines` and the catalogue and run-saving code with the text path (extract the shared parts; `validateLines` is currently private).
+  - `src/server/modules/checks/photos.ts`: move `decodeImage` (with `looksLike` and the base64 check) here from `catalogue/price-list.ts` and export it; `price-list.ts` imports it. Do not copy it.
+  - Prisma enum `AiRunKind` += `usual_list_photo` (a new migration after `20261028090000_round_unit_snapshot`).
+  - The data notice: add the sentence to the "Your pasted order" item of `src/components/setup/data-notice.tsx` (setup step 1) and to `src/components/settings/your-data-card.tsx` (settings). Settings has no notice today.
+  - `src/components/setup/paste-step.tsx`: the photo option (it is the only paste flow; the usual-list page has none).
 - Test: `tests/api/usual-list-photo.test.ts`
 
 **Interfaces:**
 
 - Produces: `parseUsualListPhoto(deps, caller, shopId, { imageBase64: string; mimeType: string }): Promise<ParseView>` (owner).
   - JPEG, PNG or WebP only, otherwise 422 `UNSUPPORTED_TYPE`; at most 5 MB, otherwise 422 `TOO_LARGE`.
-  - The rate-limit bucket is `ai-parse:<shopId>`, shared with text.
+  - The rate-limit bucket is `ai-parse:<shopId>`, 10 per 3,600,000 ms, shared with text. Check the type and size first (as `decodeImage` does), then call `enforceRateLimit`.
+  - The route takes `{ imageBase64, mimeType }` as a strict Zod object and sets `maxBodyBytes: 8 * 1024 * 1024` (a 5 MB photo is about 6.7 MB as base64; the default is 1 MiB), like the price-list route.
+  - `ParseView` is unchanged (`source: 'ai'`); no sample prices are attached to a photo.
   - The run is stored with `redactedInput = '[photo, not stored]'`. The image is held only in memory for the call.
   - With no lines, the view's `ignoredText` stays as returned, and the UI shows the hint.
   - **The notice text** (setup step 1 and settings): "If you use a photo, it is sent to our AI provider so it can be read, and BeliKongsi does not keep it. Cover names and phone numbers before you take the photo."
-  - **The picker** (`invoice-photo-picker.tsx`): accepts `image/*` and converts any image to JPEG through a canvas (quality 0.85, at most 2,000 px on the long side) before upload.
+  - **The picker** (`src/components/setup/invoice-photo-picker.tsx`): accepts `image/*` and converts any image to JPEG through a canvas (quality 0.85, at most 2,000 px on the long side) before upload.
 
 - [ ] **Step 1: Write the failing tests:**
 
 ```ts
+// ah = await app.as('ahSeng'); KEDAI = seedId('shop', 'KEDAI_KOPI'); b64 = (b: Buffer) => b.toString('base64').
+// invoiceFixture starts with the JPEG bytes ff d8 ff (the server checks them); the fake reader's
+// fixtures are keyed by `describePriceListInput({ image })`, e.g. `[image image/jpeg N bytes]`.
+// The zero-filled 6 MB case is refused on size before the bytes are inspected.
 it('reads an invoice photo with the same review as pasted text (story 26)', async () => {
   const v = (
     await ah.post(`/api/shops/${KEDAI}/usual-list/parse-photo`, {
@@ -89,7 +109,9 @@ it('never stores the photo', async () => {
   expect(JSON.stringify(await app.prisma.activityLogEntry.findMany())).not.toContain(
     b64(invoiceFixture).slice(0, 40),
   );
-  expect(listFilesRecursively('.data/storage-test')).toEqual(filesBefore);
+  // filesBefore is taken before the call from the temp storage dir:
+  const files = () => readdirSync(app.deps.env.LOCAL_STORAGE_DIR, { recursive: true }).sort();
+  expect(files()).toEqual(filesBefore);
 });
 it('answers a photo with no items with an empty review', async () => {
   /* fake returns no lines → 200, lines [] */
@@ -122,8 +144,8 @@ it('shares the 10-an-hour limit with text parsing', async () => {
 
 **Files:**
 
-- Create: `scripts/make-invoice-fixtures.ts`, `tests/fixtures/ai-accuracy/invoices/invoice-01.png` … `invoice-10.png` with matching `.json` expectations
-- Modify: `scripts/ai-accuracy.ts` (`--photos`), `docs/ai-accuracy.md`
+- Create: `scripts/make-invoice-fixtures.ts`, `tests/fixtures/ai-accuracy/invoices/invoice-01.png` … `invoice-10.png` with matching `.json` expectations (the text fixtures' `{ id, expected: [{ productKey, quantity }], mustOfferAlternatives? }` without `text`; the text run reads only the top level of `tests/fixtures/ai-accuracy`, so a subfolder is not picked up)
+- Modify: `scripts/ai-accuracy.ts` (`--photos`; it already takes `--model` and writes a `<!-- run:<model> -->` block, and `scoreOrder` in `scripts/lib/ai-accuracy-scoring.ts` scores a fixture against a `ReadResult`), `docs/ai-accuracy.md`
 
 - [ ] **Step 1: Write the generator.**
   - `make-invoice-fixtures.ts` renders 10 fictional invoices to 1,200 × 1,600 PNGs with Playwright.
@@ -139,7 +161,8 @@ it('shares the 10-an-hour limit with text parsing', async () => {
 
 **Files:**
 
-- Create: `src/server/modules/ops/impact.ts`, `src/app/api/ops/impact/route.ts`, `src/app/(shell)/ops/impact/page.tsx`
+- Create: `src/server/modules/ops/impact.ts`, `src/app/api/ops/impact/route.ts` (`route({ auth: ['ops'] }, ...)` like `ops/money`), `src/app/(shell)/ops/impact/page.tsx`
+- Modify: `src/app/(shell)/ops/layout.tsx` (add an "Impact" item to the sub-navigation)
 - Test: `tests/api/impact.test.ts`, `tests/unit/median.test.ts`
 
 **Interfaces:**
@@ -150,9 +173,9 @@ it('shares the 10-an-hour limit with text parsing', async () => {
 
 ```ts
 type ImpactView = {
-  timeToApprove: { medianMinutes: number | null; p90Minutes: number | null; samples: number }; // paid baskets with firstOpenedAt, not auto-approved
-  basketApprovalRate: { approved: number; drafted: number; rate: number | null }; // non-background shops
-  aiLinesAcceptedUnchanged: { accepted: number; suggested: number; rate: number | null }; // Σ acceptedUnchanged ÷ Σ (acceptedUnchanged + changed + removed)
+  timeToApprove: { medianMinutes: number | null; p90Minutes: number | null; samples: number }; // paid baskets with firstOpenedAt, not auto-approved (a null approvedByUserId); minutes = ceil((succeeded payment's completedAt − firstOpenedAt) ÷ 60,000), as savings.ts does
+  basketApprovalRate: { approved: number; drafted: number; rate: number | null }; // non-background shops (Shop.isBackground false); drafted = draftedAt set, approved = status paid
+  aiLinesAcceptedUnchanged: { accepted: number; suggested: number; rate: number | null }; // confirmed runs of kind usual_list_text or usual_list_photo only (price_list runs store a different changeSummary): Σ acceptedUnchanged ÷ Σ (acceptedUnchanged + changed + removed)
   claimRate: { claimedUnits: number; deliveredUnits: number; rate: number | null };
   supplierReliability: {
     supplierId: string;
@@ -173,24 +196,24 @@ it.each([
   [[1, 2, 9], 2],
 ])('median of %j is %s', (v, m) => expect(median(v)).toBe(m));
 it('shows dashes, not errors, before any data', async () => {
-  const v = (await nadia.get('/api/ops/impact')).body; // seed 'reference'
+  const v = (await nadia.get('/api/ops/impact')).body; // createTestApp({ seed: 'reference' }); nadia = await app.as('nadia')
   expect(v.basketApprovalRate.rate).toBeNull();
   expect(v.timeToApprove.medianMinutes).toBeNull();
 });
 it('computes the panel from a known week', async () => {
-  // demo seed. Ah Seng parses SAMPLE_ORDER_TEXT, then saves with M3 Task 6's edits (EGG_A kept, OIL 2→3, CUPS removed, EM added)
+  // demo seed. Ah Seng sets Kedai's pickup point (as setupKedaiKopi does), parses SAMPLE_ORDER_TEXT, then saves with the suggestionRunId and M3 Task 6's edits (tests/api/usual-list.test.ts: EGG_A kept, OIL 2→3, CUPS removed, EM added)
   //   → changeSummary {3 unchanged, 1 changed, 1 added, 1 removed} → accepted 3 of 5 → 0.6
-  // Ah Seng opens the basket at 06:10 and pays at 06:13; Gerai's and Kafe's seeded baskets were never opened (no firstOpenedAt) → samples 1, median 3
-  // drafted 3 (Gerai, Kafe, Kedai) and paid 3 → rate 1
+  // Saving drafts Kedai's W45 basket. Ah Seng pays it (payBasket); then, as time-saved.test.ts does, set the basket's firstOpenedAt to 06:10 and the payment's completedAt to 06:13 (the clock is fixed, so nothing else stamps them). Gerai's and Kafe's seeded baskets (both weeks) were never opened (no firstOpenedAt) → samples 1, median 3
+  // drafted 5 (Gerai and Kafe in W44 and W45, Kedai in W45) and paid 5 → rate 1
   const v = (await nadia.get('/api/ops/impact')).body;
   expect(v).toMatchObject({
     timeToApprove: { medianMinutes: 3, samples: 1 },
-    basketApprovalRate: { approved: 3, drafted: 3, rate: 1 },
+    basketApprovalRate: { approved: 5, drafted: 5, rate: 1 },
     aiLinesAcceptedUnchanged: { accepted: 3, suggested: 5, rate: 0.6 },
   });
 });
 it('keeps the panel for Ops only', async () => {
-  /* ahSeng → 403 */
+  /* (await app.as('ahSeng')).get('/api/ops/impact') → 403 */
 });
 ```
 

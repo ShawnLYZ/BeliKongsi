@@ -8,11 +8,12 @@ import type { OrderReader, PriceListResult, ReadResult } from './types';
 
 export type FakeOrderReader = OrderReader & {
   /**
-   * Every call, in order: the redacted text of an order, or a price list as
-   * `describePriceListInput` records it (its text, then a marker for any photo).
+   * Every call, in order: the redacted text of an order, an order photo as its marker
+   * (`[image <type> <n> bytes]`), or a price list as `describePriceListInput` records it
+   * (its text, then a marker for any photo).
    */
   received: string[];
-  /** Order answers by redacted text. Tests add their own entries. */
+  /** Order answers by redacted text, or by the photo marker for an invoice photo. Tests add their own entries. */
   fixtures: Record<string, ReadResult>;
   /** Price-list answers by `describePriceListInput`, starting with the sample. Tests add their own. */
   priceListFixtures: Record<string, PriceListResult>;
@@ -41,6 +42,12 @@ export function createFakeOrderReader(
       reader.received.push(text);
       if (reader.failWith) throw reader.failWith;
       return structuredClone(reader.fixtures[text] ?? { lines: [], ignoredText: [] });
+    },
+    async readOrderImage({ image }) {
+      const key = describePriceListInput({ image });
+      reader.received.push(key);
+      if (reader.failWith) throw reader.failWith;
+      return structuredClone(reader.fixtures[key] ?? { lines: [], ignoredText: [] });
     },
     async readPriceList({ text, image }) {
       const key = describePriceListInput({ text, image });

@@ -17,9 +17,11 @@ for (const file of ['.env.local', '.env']) {
   }
 }
 
-const FIXTURE_DIR = join('tests', 'fixtures', 'ai-accuracy');
+const FIXTURE_ROOT = join('tests', 'fixtures', 'ai-accuracy');
+const PHOTO_DIR = join(FIXTURE_ROOT, 'invoices');
 const DOC = join('docs', 'ai-accuracy.md');
 const PASS_MARK = 18;
+const PHOTO_PASS_MARK = 8;
 const GAP_MS = 1000;
 
 const catalogue: CatalogueEntry[] = PRODUCTS.map((p) => ({
@@ -56,14 +58,14 @@ function modelArg(): string {
   const argv = process.argv.slice(2);
   const at = argv.indexOf('--model');
   const model = at === -1 ? undefined : argv[at + 1];
-  if (!model) throw new Error('Usage: pnpm ai:accuracy -- --model <name>');
+  if (!model) throw new Error('Usage: pnpm ai:accuracy -- [--photos] --model <name>');
   return model;
 }
 
 /** Replaces this model's section of the doc (or appends it), leaving the hand-written text alone. */
-async function writeSection(model: string, section: string): Promise<void> {
-  const start = `<!-- run:${model} -->`;
-  const end = `<!-- /run:${model} -->`;
+async function writeSection(runKey: string, section: string): Promise<void> {
+  const start = `<!-- run:${runKey} -->`;
+  const end = `<!-- /run:${runKey} -->`;
   const block = `${start}\n${section}\n${end}`;
   let doc: string;
   try {
@@ -82,12 +84,17 @@ async function writeSection(model: string, section: string): Promise<void> {
 
 async function main(): Promise<void> {
   const model = modelArg();
+  const photos = process.argv.includes('--photos');
+  const FIXTURE_DIR = photos ? PHOTO_DIR : FIXTURE_ROOT;
+  const passMark = photos ? PHOTO_PASS_MARK : PASS_MARK;
+  const runKey = photos ? `photos-${model}` : model;
   const apiKey = process.env.GEMINI_API_KEY?.trim();
   if (!apiKey || /^<.*>$/.test(apiKey)) throw new Error('GEMINI_API_KEY is not set in .env.local.');
 
   const files = (await readdir(FIXTURE_DIR)).filter((f) => f.endsWith('.json')).sort();
   const fixtures: AccuracyFixture[] = [];
   for (const f of files) {
+    // Photo fixtures have no `text`; their picture sits beside the expectations.
     fixtures.push(JSON.parse(await readFile(join(FIXTURE_DIR, f), 'utf8')) as AccuracyFixture);
   }
   const reader = createGeminiOrderReader({ apiKey, model });
@@ -96,10 +103,18 @@ async function main(): Promise<void> {
   for (const [i, fx] of fixtures.entries()) {
     if (i > 0) await new Promise((r) => setTimeout(r, GAP_MS));
     try {
-      const result = await reader.readOrderText({
-        text: redactPersonalData(fx.text).text,
-        catalogue,
-      });
+      const result = photos
+        ? await reader.readOrderImage({
+            image: {
+              bytes: new Uint8Array(await readFile(join(FIXTURE_DIR, `${fx.id}.png`))),
+              mimeType: 'image/png',
+            },
+            catalogue,
+          })
+        : await reader.readOrderText({
+            text: redactPersonalData(fx.text).text,
+            catalogue,
+          });
       rows.push({
         id: fx.id,
         score: scoreOrder(fx, result, keyById),
@@ -121,7 +136,7 @@ async function main(): Promise<void> {
   const invented = rows.reduce((n, r) => n + (r.score?.invented.length ?? 0), 0);
   const errors = rows.filter((r) => !r.score).length;
   const unavailable = errors === rows.length ? await probeStatus(apiKey, model) : null;
-  const qualifies = correct >= PASS_MARK && invented === 0;
+  const qualifies = correct >= passMark && invented === 0;
   const myt = new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Asia/Kuala_Lumpur',
     dateStyle: 'medium',
@@ -130,14 +145,14 @@ async function main(): Promise<void> {
 
   const cell = (s: string) => s.replaceAll('|', '/') || '-';
   const lines = [
-    `## Run: ${model}`,
+    photos ? `## Invoice photos: ${model}` : `## Run: ${model}`,
     '',
     `Date: ${myt} MYT`,
     '',
-    `Result: **${correct}/${fixtures.length} correct, ${invented} invented ids, ${errors} errors** - ${qualifies ? 'qualifies' : 'does not qualify'} (bar: at least ${PASS_MARK}/${fixtures.length} and 0 invented ids).`,
+    `Result: **${correct}/${fixtures.length} correct, ${invented} invented ids, ${errors} errors** - ${photos ? `${qualifies ? 'meets' : 'misses'} the 8/10 marker (the spec sets no pass mark for photos; 8/10 is the level below which the README notes the limitation)` : `${qualifies ? 'qualifies' : 'does not qualify'} (bar: at least ${PASS_MARK}/${fixtures.length} and 0 invented ids)`}.`,
     ...(unavailable ? ['', `All calls failed (${unavailable}): model unavailable.`] : []),
     '',
-    '| Order | Result | Problems | Model read |',
+    `| ${photos ? 'Invoice' : 'Order'} | Result | Problems | Model read |`,
     '| ----- | ------ | -------- | ---------- |',
     ...rows.map((r) => {
       const res = r.score ? (r.score.correct ? 'pass' : 'FAIL') : 'error';
@@ -145,7 +160,7 @@ async function main(): Promise<void> {
       return `| ${r.id} | ${res} | ${cell(problems)} | ${cell(r.got)} |`;
     }),
   ];
-  await writeSection(model, lines.join('\n'));
+  await writeSection(runKey, lines.join('\n'));
   console.log(
     `\n${model}: ${correct}/${fixtures.length} correct, ${invented} invented, ${errors} errors${unavailable ? ` (${unavailable})` : ''}`,
   );

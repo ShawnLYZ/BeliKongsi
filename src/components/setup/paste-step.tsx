@@ -11,6 +11,7 @@ import {
   FIELD_LABEL,
 } from '@/components/common/controls';
 import { DataNotice } from './data-notice';
+import { InvoicePhotoPicker } from './invoice-photo-picker';
 
 const MAX_CHARS = 2000;
 const AI_UNAVAILABLE_MESSAGE =
@@ -32,8 +33,8 @@ export function PasteStep({
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<Failure | null>(null);
 
-  async function read(useSavedExample: boolean) {
-    if (!useSavedExample && text.trim() === '') {
+  async function read(useSavedExample: boolean, photo?: { imageBase64: string; mimeType: string }) {
+    if (!photo && !useSavedExample && text.trim() === '') {
       setFailure({
         message: 'Paste an order first, or try with sample data.',
         canUseSavedExample: false,
@@ -44,14 +45,20 @@ export function PasteStep({
     setBusy(true);
     setFailure(null);
     try {
-      const view = await apiFetch<ParseView>(`/api/shops/${shopId}/usual-list/parse`, {
-        body: { text, ...(useSavedExample ? { useSavedExample: true } : {}) },
-        quiet: true,
-      });
+      const view = photo
+        ? await apiFetch<ParseView>(`/api/shops/${shopId}/usual-list/parse-photo`, {
+            body: photo,
+            quiet: true,
+          })
+        : await apiFetch<ParseView>(`/api/shops/${shopId}/usual-list/parse`, {
+            body: { text, ...(useSavedExample ? { useSavedExample: true } : {}) },
+            quiet: true,
+          });
       if (view.lines.length === 0) {
         setFailure({
-          message:
-            "We couldn't find any products we sell in that text. Check it and try again, or use the catalogue form instead.",
+          message: photo
+            ? "We couldn't find any items in this photo. Try a clearer photo, paste the order instead, or use the catalogue form."
+            : "We couldn't find any products we sell in that text. Check it and try again, or use the catalogue form instead.",
           canUseSavedExample: false,
           offerForm: true,
         });
@@ -152,6 +159,13 @@ export function PasteStep({
         >
           Try with sample data
         </button>
+        <InvoicePhotoPicker
+          disabled={busy}
+          onPicked={(imageBase64, mimeType) => void read(false, { imageBase64, mimeType })}
+          onError={(message) =>
+            setFailure({ message, canUseSavedExample: false, offerForm: false })
+          }
+        />
         <button type="button" className={BUTTON_QUIET} onClick={onUseForm}>
           Use the catalogue form instead
         </button>

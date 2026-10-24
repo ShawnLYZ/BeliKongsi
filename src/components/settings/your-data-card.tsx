@@ -63,6 +63,11 @@ export function YourDataCard({ shopId }: { shopId: string }) {
       </a>
 
       <p className="text-base">
+        If you use a photo, it is sent to our AI provider so it can be read, and BeliKongsi does not
+        keep it. Cover names and phone numbers before you take the photo.
+      </p>
+
+      <p className="text-base">
         You can ask for your shop and its people to be deleted. Our team checks the request.
       </p>
       {requested ? (

@@ -246,6 +246,7 @@ enum ActorType {
 
 enum AiRunKind {
   usual_list_text
+  usual_list_photo
   price_list
 }
 
