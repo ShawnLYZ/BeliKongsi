@@ -207,11 +207,11 @@ Through this project, we learned how AI and automation can simplify real-world b
 
 ## Team
 
-| Name                | Role        | GitHub                                                     |
-| ------------------- | ----------- | ---------------------------------------------------------- |
-| Shawn Lee Yan Zheng | Team Leader | [@ShawnLYZ](https://github.com/ShawnLYZ)                   |
-| Lee Earn Hui        | Documenter  | [@LEH268](https://github.com/LEH268)                       |
-| Lee Min Ming        | Documenter  | [@mmlee1604-creator](https://github.com/mmlee1604-creator) |
+| Name                | Role                  | GitHub |
+|---------------------|-----------------------|--------|
+| Shawn Lee Yan Zheng | Team Leader           | [@ShawnLYZ](https://github.com/ShawnLYZ) |
+| Lee Earn Hui        | Documentation & Research | [@LEH268](https://github.com/LEH268) |
+| Lee Min Ming        | Documentation & Research | [@mmlee1604-creator](https://github.com/mmlee1604-creator) |
 
 ## Submission Checklist
 
