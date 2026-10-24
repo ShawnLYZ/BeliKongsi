@@ -26,7 +26,7 @@ export default async function SupplierOrdersPage() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-2xl font-bold">Orders</h1>
+        <h1 className="text-[1.75rem] leading-tight font-bold">Orders</h1>
         <p className="mt-1 text-base">{session.membership.orgName}</p>
       </div>
       {orders.length === 0 ? (

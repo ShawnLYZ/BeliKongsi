@@ -9,7 +9,7 @@ function Stat({ label, value, note }: { label: string; value: string; note: stri
   return (
     <div className="bg-card rounded-2xl border p-4">
       <dt className="text-muted-foreground text-base font-semibold">{label}</dt>
-      <dd className="text-3xl font-bold tabular-nums">{value}</dd>
+      <dd className="mt-1 text-3xl font-bold tracking-[-0.02em] tabular-nums">{value}</dd>
       <dd className="text-muted-foreground text-base">{note}</dd>
     </div>
   );
@@ -43,11 +43,16 @@ export function RoundsBoard({ board }: { board: OpsRoundsBoard }) {
           <section
             key={col.status}
             aria-labelledby={`col-${col.status}`}
-            className="bg-muted/60 flex flex-col gap-2 rounded-2xl p-3"
+            className="bg-muted/55 border-border/70 flex flex-col gap-2 rounded-2xl border p-3"
           >
-            <h2 id={`col-${col.status}`} className="flex justify-between text-lg font-semibold">
+            <h2
+              id={`col-${col.status}`}
+              className="flex items-center justify-between gap-2 px-1 text-base font-semibold"
+            >
               <span>{statusWords(col.status)}</span>
-              <span className="tabular-nums">{col.rounds.length}</span>
+              <span className="bg-card text-muted-foreground min-w-7 rounded-full px-2 text-center text-sm leading-6 tabular-nums ring-1 ring-black/5">
+                {col.rounds.length}
+              </span>
             </h2>
             {col.rounds.length === 0 ? (
               <p className="text-muted-foreground text-base">No rounds</p>

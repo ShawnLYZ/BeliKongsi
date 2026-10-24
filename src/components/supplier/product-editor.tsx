@@ -19,7 +19,7 @@ export function ProductEditor({
         ← All products
       </Link>
       <div>
-        <h1 className="text-2xl font-bold">{product.name}</h1>
+        <h1 className="text-[1.75rem] leading-tight font-bold">{product.name}</h1>
         <p className="mt-1 text-base">
           The open round keeps the prices it opened with. What you save here reaches shops from the
           next round.

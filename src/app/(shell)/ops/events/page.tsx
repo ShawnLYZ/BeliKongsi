@@ -1,6 +1,8 @@
 import { EmptyState } from '@/components/common/empty-state';
 import { EventsTable } from '@/components/ops/events-table';
+import { WebhooksPanel } from '@/components/ops/webhooks-panel';
 import { listEvents } from '@/server/modules/integration/events';
+import { listWebhookActivity } from '@/server/modules/integration/webhooks';
 import { personCaller } from '@/server/platform/caller';
 import { getDeps } from '@/server/platform/deps';
 import { scheduleDueWork } from '@/server/platform/due-work';
@@ -11,21 +13,20 @@ export default async function OpsEventsPage() {
   const session = requirePageRole(await getPageSession(), ['ops']);
   const deps = getDeps();
   scheduleDueWork(deps);
-  const events = await listEvents(deps, personCaller(session));
+  const caller = personCaller(session);
+  const [events, webhooks] = await Promise.all([
+    listEvents(deps, caller),
+    listWebhookActivity(deps, caller),
+  ]);
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold">Integration events</h1>
+        <h1 className="text-[1.75rem] leading-tight font-bold">Integration events</h1>
         <p className="text-base font-semibold">Latest 100, newest first</p>
         <p className="max-w-3xl text-base">
           Every change other Orbyte apps may care about is written here in the same step as the
           change itself. Events hold ids, quantities, amounts and statuses only, never names or
           contact details.
-        </p>
-        <p className="text-muted-foreground max-w-3xl text-base">
-          How other Orbyte apps will subscribe (coming later): an app registers a webhook URL, and
-          each new event is sent to it with a signature header, retried until it is received. Until
-          then, the events are listed here.
         </p>
       </div>
       {events.length === 0 ? (
@@ -37,6 +38,7 @@ export default async function OpsEventsPage() {
       ) : (
         <EventsTable events={events} />
       )}
+      <WebhooksPanel activity={webhooks} />
     </div>
   );
 }

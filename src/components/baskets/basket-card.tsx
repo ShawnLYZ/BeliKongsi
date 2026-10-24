@@ -17,7 +17,7 @@ export function BasketCard({ basket, serverNow }: { basket: OwnerBasketView; ser
   return (
     <section
       aria-labelledby="basket-card"
-      className="border-card-top bg-card flex flex-col gap-3 rounded-2xl border border-t-8 p-4"
+      className="bg-card flex flex-col gap-3 rounded-2xl border p-4"
     >
       <div className="flex flex-col gap-1">
         <h2 id="basket-card" className="text-lg font-semibold">

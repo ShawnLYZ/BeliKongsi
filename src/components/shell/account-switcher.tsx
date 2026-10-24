@@ -15,11 +15,29 @@ type SessionViewJson = { activeMembership: { id: string; role: Role } };
 const ROW =
   'flex min-h-12 w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left text-base outline-none focus-visible:ring-3 focus-visible:ring-ring/60';
 
-export function RoleBadge({ role, className }: { role: Role; className?: string }) {
+/** Each role keeps one tint everywhere, so a list of accounts can be scanned by role. */
+const ROLE_TINT: Record<Role, string> = {
+  owner: 'bg-primary-soft text-primary-hover ring-primary/20',
+  staff: 'bg-[#e4ecf6] text-[#1d3d66] ring-[#1d3d66]/15',
+  supplier: 'bg-accent-soft text-accent-ink ring-accent-ink/20',
+  ops: 'bg-[#ebe5f3] text-[#4a2f72] ring-[#4a2f72]/15',
+};
+
+export function RoleBadge({
+  role,
+  className,
+  onDark = false,
+}: {
+  role: Role;
+  className?: string;
+  /** On the navy top bar the badge is the solid amber chip. */
+  onDark?: boolean;
+}) {
   return (
     <span
       className={cn(
-        'bg-accent text-accent-foreground inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-base font-semibold',
+        'inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-base leading-6 font-semibold',
+        onDark ? 'bg-accent text-accent-foreground' : cn('ring-1 ring-inset', ROLE_TINT[role]),
         className,
       )}
     >
@@ -90,14 +108,14 @@ export function AccountSwitcher({
         type="button"
         aria-haspopup="dialog"
         onClick={() => dialog.current?.showModal()}
-        className="flex min-h-11 w-full items-center gap-2 rounded-xl bg-white/10 px-3 py-1.5 text-left hover:bg-white/15 focus-visible:ring-3 focus-visible:ring-white focus-visible:outline-none sm:w-auto"
+        className="flex min-h-11 w-full items-center gap-2.5 rounded-xl bg-white/[0.07] px-3 py-1.5 text-left ring-1 ring-white/10 transition-colors ring-inset hover:bg-white/[0.12] focus-visible:ring-3 focus-visible:ring-white focus-visible:outline-none sm:w-auto"
       >
         <span className="flex min-w-0 flex-col leading-tight">
           <span className="truncate text-base font-semibold">{active.orgName}</span>
-          <span className="truncate text-base opacity-90">{displayName}</span>
+          <span className="text-topbar-muted truncate text-base">{displayName}</span>
         </span>
-        <RoleBadge role={active.role} className="ml-auto" />
-        <ChevronDown aria-hidden className="size-5 shrink-0" />
+        <RoleBadge role={active.role} onDark className="ml-auto" />
+        <ChevronDown aria-hidden className="text-topbar-muted size-5 shrink-0" />
         <span className="sr-only">: switch business or role</span>
       </button>
 
@@ -107,7 +125,7 @@ export function AccountSwitcher({
         onClick={(e) => {
           if (e.target === dialog.current) close();
         }}
-        className="bg-popover text-popover-foreground mx-auto mt-4 w-[calc(100%-2rem)] max-w-md rounded-2xl p-0 shadow-xl backdrop:bg-black/50 sm:mt-16"
+        className="bg-popover text-popover-foreground shadow-overlay mx-auto mt-4 w-[calc(100%-2rem)] max-w-md rounded-2xl p-0 backdrop:bg-[#10243f]/55 backdrop:backdrop-blur-[2px] sm:mt-16"
       >
         <div className="flex max-h-[85vh] flex-col">
           <div className="flex items-center justify-between gap-2 border-b px-4 py-2">

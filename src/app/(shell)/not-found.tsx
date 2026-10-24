@@ -5,7 +5,7 @@ import { BUTTON_PRIMARY } from '@/components/common/controls';
 export default function ShellNotFound() {
   return (
     <section className="bg-card text-card-foreground flex max-w-xl flex-col gap-4 rounded-2xl border p-5">
-      <h1 className="text-2xl font-bold">Not found</h1>
+      <h1 className="text-[1.75rem] leading-tight font-bold">Not found</h1>
       <p className="text-base">
         This page no longer exists, or the link is wrong. The demo may have been reset.
       </p>

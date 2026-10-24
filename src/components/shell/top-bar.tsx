@@ -5,15 +5,17 @@ import { homeFor } from '@/lib/roles';
 import type { AccountLike } from '@/lib/roles';
 import { cn } from '@/lib/utils';
 import { AccountSwitcher, type SwitcherMembership } from './account-switcher';
+import { Wordmark } from './brand-mark';
 import { DemoMenu } from './demo-menu';
 
 const ICON_LINK =
-  'relative inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-lg px-2 text-base font-medium hover:bg-white/10 focus-visible:ring-3 focus-visible:ring-white focus-visible:outline-none';
+  'relative inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-lg px-2.5 text-base font-medium text-topbar-muted transition-colors hover:bg-white/[0.08] hover:text-white focus-visible:ring-3 focus-visible:ring-white focus-visible:outline-none';
 
 function CountBadge({ count, word }: { count: number; word: string }) {
   if (count <= 0) return null;
+  // Icon-only (narrow): a corner badge on the icon. With the label showing (lg): inline after it.
   return (
-    <span className="bg-accent text-accent-foreground absolute top-0.5 right-0.5 min-w-5 rounded-full px-1 text-center text-xs leading-5 font-bold tabular-nums">
+    <span className="bg-accent text-accent-foreground ring-topbar absolute top-0.5 right-0 min-w-5 rounded-full px-1 text-center text-xs leading-5 font-bold tabular-nums ring-2 lg:static lg:ring-0">
       {count > 99 ? '99+' : count}
       <span className="sr-only"> {word}</span>
     </span>
@@ -70,20 +72,21 @@ export function TopBar({
   narrow: boolean;
 }) {
   return (
-    <header className="bg-topbar text-topbar-foreground">
+    <header className="bg-topbar text-topbar-foreground border-b border-white/[0.06]">
       <div
         className={cn(
-          'mx-auto flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2',
+          'mx-auto flex flex-wrap items-center gap-x-2 gap-y-2 px-4 py-2.5',
           narrow ? 'max-w-[430px]' : 'max-w-6xl',
         )}
       >
         <Link
           href={homeFor(active.role)}
-          className="mr-auto inline-flex min-h-11 items-center rounded-lg text-xl font-bold tracking-tight focus-visible:ring-3 focus-visible:ring-white focus-visible:outline-none"
+          aria-label="BeliKongsi"
+          className="mr-auto inline-flex min-h-11 items-center rounded-lg pr-1 focus-visible:ring-3 focus-visible:ring-white focus-visible:outline-none"
         >
-          BeliKongsi
+          <Wordmark />
         </Link>
-        <div className={cn('order-last w-full', !narrow && 'sm:order-none sm:w-auto')}>
+        <div className={cn('order-last w-full', !narrow && 'sm:order-none sm:mr-2 sm:w-auto')}>
           <AccountSwitcher
             displayName={displayName}
             userId={userId}

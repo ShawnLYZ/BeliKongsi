@@ -29,7 +29,7 @@ export default async function ApprovalsPage() {
   const items = await listPendingApprovals(getDeps(), personCaller(session));
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-bold">Approvals</h1>
+      <h1 className="text-[1.75rem] leading-tight font-bold">Approvals</h1>
       {items.length === 0 ? (
         <EmptyState title="Nothing waiting for you" {...EXAMPLES[role]} />
       ) : (

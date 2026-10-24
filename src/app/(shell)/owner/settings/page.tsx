@@ -24,7 +24,7 @@ export default async function OwnerSettingsPage() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-2xl font-bold">Settings</h1>
+        <h1 className="text-[1.75rem] leading-tight font-bold">Settings</h1>
         <h2 className="mt-3 text-xl font-semibold">How you get your goods</h2>
         <p className="text-base">
           Your usual choice for every basket. You can still switch for a single week.

@@ -62,7 +62,7 @@ export function SetupFlow({
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold">Set up BeliKongsi</h1>
+        <h1 className="text-[1.75rem] leading-tight font-bold">Set up BeliKongsi</h1>
         {alreadyDone && stage.step === 1 ? (
           <p className="text-base">
             Your setup is already done. Going through it again replaces your usual list.

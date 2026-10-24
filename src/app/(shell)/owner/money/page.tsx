@@ -16,7 +16,7 @@ export default async function OwnerMoneyPage() {
   });
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-bold">Money</h1>
+      <h1 className="text-[1.75rem] leading-tight font-bold">Money</h1>
       <MoneyHistory shopId={shopId} initial={view} />
     </div>
   );

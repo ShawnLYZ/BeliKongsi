@@ -7,7 +7,7 @@ export function OpenRoundList({ rounds }: { rounds: SupplierOpenRoundView[] }) {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-2xl font-bold">Open rounds</h1>
+        <h1 className="text-[1.75rem] leading-tight font-bold">Open rounds</h1>
         <p className="mt-1 text-base">
           What shops have ordered so far this cycle. Totals can still change until the cut-off.
         </p>

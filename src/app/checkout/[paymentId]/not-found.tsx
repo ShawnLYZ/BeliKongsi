@@ -10,7 +10,7 @@ export default function CheckoutNotFound() {
   return (
     <main id="main" className="flex min-h-screen flex-col px-4 py-5">
       <PhoneColumn className="bg-card text-card-foreground flex flex-col gap-4 rounded-2xl p-5">
-        <h1 className="text-2xl font-bold">Payment not found</h1>
+        <h1 className="text-[1.75rem] leading-tight font-bold">Payment not found</h1>
         <p className="text-base">This payment no longer exists. The demo may have been reset.</p>
         <p className="text-muted-foreground text-base">
           Open your basket to approve and pay again, or go back to your home screen.

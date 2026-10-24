@@ -29,7 +29,7 @@ export default async function OwnerPickupPage({
   if (!pickup) notFound();
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-bold">Your pickup</h1>
+      <h1 className="text-[1.75rem] leading-tight font-bold">Your pickup</h1>
       <LateBanner pickup={pickup} showCancelNote />
       <PickupDetail pickup={pickup} />
       <LateCancelList pickup={pickup} />

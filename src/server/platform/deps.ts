@@ -3,6 +3,7 @@ import { createFakeOrderReader } from '@/server/adapters/ai/fake';
 import { createGeminiOrderReader } from '@/server/adapters/ai/gemini';
 import type { OrderReader } from '@/server/adapters/ai/types';
 import { systemClock, type Clock } from '@/server/adapters/clock';
+import { realHttp, type HttpAdapter } from '@/server/adapters/http';
 import { simulatedLogistics, type LogisticsPartner } from '@/server/adapters/logistics';
 import { simulatedPayments, type PaymentsPartner } from '@/server/adapters/payments';
 import { createLocalStorage } from '@/server/adapters/storage/local';
@@ -19,6 +20,7 @@ export interface AppDeps {
   payments: PaymentsPartner;
   ai: OrderReader;
   storage: StorageAdapter;
+  http: HttpAdapter;
 }
 
 let current: AppDeps | null = null;
@@ -47,6 +49,7 @@ export function getDeps(): AppDeps {
               secret: env.SESSION_SECRET,
               now: () => systemClock.now(),
             }),
+      http: realHttp,
     };
   }
   return current;

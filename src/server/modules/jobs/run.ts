@@ -1,8 +1,10 @@
 import { draftWeeklyBaskets } from '@/server/modules/baskets/draft';
 import { expireBaskets, sendBasketReminders } from '@/server/modules/baskets/lifecycle';
+import { deletePhotosPastRetention } from '@/server/modules/checks/photo-retention';
 import { sweepDeletedPhotos } from '@/server/modules/directory/deletion';
 import { detectLateDeliveries } from '@/server/modules/fulfilment/late';
 import { enforceCheckWindow, remindUncollected } from '@/server/modules/fulfilment/reminders';
+import { deliverDueWebhooks } from '@/server/modules/integration/webhooks';
 import { voidOverduePayments } from '@/server/modules/payments/overdue';
 import { closeDueRounds } from '@/server/modules/rounds/close';
 import { openDueRounds } from '@/server/modules/rounds/open';
@@ -31,6 +33,10 @@ export type JobsReport = {
   uncheckedClosed: number;
   /** Notices sent for stalled confirmations, overdue approvals, missed dispatches and hub checks. */
   operationalReminders: number;
+  /** Webhook deliveries that reached their receiver in this run. */
+  deliveredWebhooks: number;
+  /** Delivery photos deleted because they passed their 90 days. */
+  deletedPhotos: number;
 };
 
 /**
@@ -48,14 +54,31 @@ export async function runDueJobs(deps: AppDeps): Promise<JobsReport> {
   const { reminded: uncollectedReminders } = await remindUncollected(deps);
   const { reminded: checkReminders, closed: uncheckedClosed } = await enforceCheckWindow(deps);
   const { sent: operationalReminders } = await sendOperationalReminders(deps);
-  let monthlySummaries: number;
-  try {
-    ({ sent: monthlySummaries } = await sendMonthlySummaries(deps));
-  } finally {
-    // Removes files of photos deleted with an anonymised shop whose first purge failed. It runs
-    // even when the summaries throw, so a failing summary never holds up the purge.
-    await sweepDeletedPhotos(deps);
+  // The last four steps each run even when an earlier one throws, so a failing step never holds
+  // up the others; the first failure is rethrown once they have all run.
+  const failures: unknown[] = [];
+  async function settle<T>(step: () => Promise<T>, fallback: T): Promise<T> {
+    try {
+      return await step();
+    } catch (error) {
+      failures.push(error);
+      return fallback;
+    }
   }
+  // Before the sweep below, which retries any file whose removal failed here.
+  const { deleted: deletedPhotos } = await settle(() => deletePhotosPastRetention(deps), {
+    deleted: 0,
+  });
+  const { sent: monthlySummaries } = await settle(() => sendMonthlySummaries(deps), { sent: 0 });
+  // Removes files of photos deleted with an anonymised shop whose first purge failed.
+  await settle(() => sweepDeletedPhotos(deps), null);
+  // Last, so the events this run emitted go out in the same run.
+  const { succeeded: deliveredWebhooks } = await settle(() => deliverDueWebhooks(deps), {
+    attempted: 0,
+    succeeded: 0,
+    failed: 0,
+  });
+  if (failures.length > 0) throw failures[0];
   return {
     openedRounds: opened,
     draftedBaskets: drafted,
@@ -70,5 +93,7 @@ export async function runDueJobs(deps: AppDeps): Promise<JobsReport> {
     checkReminders,
     uncheckedClosed,
     operationalReminders,
+    deliveredWebhooks,
+    deletedPhotos,
   };
 }

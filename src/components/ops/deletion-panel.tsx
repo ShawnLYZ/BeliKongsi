@@ -69,7 +69,7 @@ export function DeletionPanel({
   return (
     <section
       aria-labelledby={`${id}-title`}
-      className="border-t-card-top bg-card flex flex-col gap-4 rounded-2xl border border-t-4 p-5"
+      className="border-accent bg-card flex flex-col gap-4 rounded-2xl border p-5"
     >
       <div>
         <p className="text-muted-foreground text-base font-semibold">Data deletion</p>

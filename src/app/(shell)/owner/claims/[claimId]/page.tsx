@@ -27,7 +27,7 @@ export default async function OwnerClaimPage({ params }: { params: Promise<{ cla
   }
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-bold">Your claim</h1>
+      <h1 className="text-[1.75rem] leading-tight font-bold">Your claim</h1>
       <ClaimStatus claim={claim} />
       <TimelineSheet subjectType="claim" subjectId={claimId} title="Claim timeline" />
       <Link href="/owner/pickups" className={BUTTON_SECONDARY}>

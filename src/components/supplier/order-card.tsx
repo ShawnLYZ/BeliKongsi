@@ -33,7 +33,7 @@ export function OrderCard({
     <article
       className={
         waiting
-          ? 'border-t-card-top bg-card flex flex-col gap-3 rounded-2xl border border-t-4 p-4'
+          ? 'border-accent bg-card flex flex-col gap-3 rounded-2xl border p-4'
           : 'bg-card flex flex-col gap-3 rounded-2xl border p-4'
       }
     >

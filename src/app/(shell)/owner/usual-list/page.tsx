@@ -16,7 +16,7 @@ export default async function OwnerUsualListPage() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-2xl font-bold">Your usual list</h1>
+        <h1 className="text-[1.75rem] leading-tight font-bold">Your usual list</h1>
         <p className="text-base">
           What you order most weeks. Your weekly basket is drafted from it every Monday at 6 am.
         </p>

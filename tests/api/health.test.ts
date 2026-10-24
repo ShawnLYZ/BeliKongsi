@@ -33,6 +33,10 @@ function depsFor(url: string): AppDeps {
     payments: simulatedPayments,
     ai: createFakeOrderReader(),
     storage: createLocalStorage({ dir: tmpdir() }),
+    http: {
+      fetch: () => Promise.reject(new Error('Network access is off in tests.')),
+      lookup: async () => ['93.184.216.34'],
+    },
   };
 }
 

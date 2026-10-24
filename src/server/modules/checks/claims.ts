@@ -29,6 +29,10 @@ export type ClaimView = {
     damaged: number;
     refundSen: number;
     photoUrls: string[];
+    /** Photos removed (after their 90 days, or with a deleted shop), shown instead of a link. */
+    photosDeleted: number;
+    /** Of those, the photos removed because their 90 days were up. */
+    photosExpired: number;
   }[];
   check: {
     submittedBy: string | null;
@@ -111,7 +115,7 @@ export async function getClaimForCaller(
   const nameOf = (allocationId: string) => products.get(allocationId)?.name ?? '';
 
   const photos = await deps.prisma.photo.findMany({
-    where: { deliveryCheckLineId: { in: check.lines.map((l) => l.id) }, deletedAt: null },
+    where: { deliveryCheckLineId: { in: check.lines.map((l) => l.id) } },
     orderBy: [{ uploadedAt: 'asc' }, { id: 'asc' }],
   });
   const checkLineOf = new Map(check.lines.map((l) => [l.allocationId, l.id]));
@@ -120,7 +124,15 @@ export async function getClaimForCaller(
   for (const l of claim.lines) {
     const checkLineId = checkLineOf.get(l.allocationId);
     const photoUrls: string[] = [];
+    let photosDeleted = 0;
+    let photosExpired = 0;
     for (const ph of photos.filter((x) => x.deliveryCheckLineId === checkLineId)) {
+      if (ph.deletedAt) {
+        photosDeleted++;
+        // A shop deletion removes its photos early; the retention job only once they are due.
+        if (ph.deletedAt >= ph.deleteAfter) photosExpired++;
+        continue;
+      }
       photoUrls.push(
         await deps.storage.createSignedReadUrl('delivery-photos', ph.storageKey, VIEW_LINK_SECONDS),
       );
@@ -131,6 +143,8 @@ export async function getClaimForCaller(
       damaged: l.damaged,
       refundSen: l.refundSen,
       photoUrls,
+      photosDeleted,
+      photosExpired,
     });
   }
 

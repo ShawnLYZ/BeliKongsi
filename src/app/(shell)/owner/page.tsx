@@ -1,5 +1,15 @@
 import Link from 'next/link';
-import { ChevronRight } from 'lucide-react';
+import {
+  ChevronRight,
+  Handshake,
+  ListChecks,
+  PackageOpen,
+  PiggyBank,
+  Settings,
+  ShoppingBasket,
+  Users,
+  Wallet,
+} from 'lucide-react';
 import type { ShopSettingsView } from '@/lib/views/directory';
 import { BasketCard } from '@/components/baskets/basket-card';
 import { BUTTON_PRIMARY } from '@/components/common/controls';
@@ -17,14 +27,14 @@ import { requireOwnerShop } from '@/server/platform/page-auth';
 import { getPageSession } from '@/server/platform/session-page';
 
 const LINKS = [
-  { href: '/owner/basket', label: "This week's basket" },
-  { href: '/owner/rounds', label: 'Open Kongsi rounds' },
-  { href: '/owner/kongsi', label: 'My Kongsi' },
-  { href: '/owner/pickups', label: 'Pickups' },
-  { href: '/owner/savings', label: 'Savings' },
-  { href: '/owner/money', label: 'Money history' },
-  { href: '/owner/usual-list', label: 'Your usual list' },
-  { href: '/owner/settings', label: 'Settings' },
+  { href: '/owner/basket', label: "This week's basket", icon: ShoppingBasket },
+  { href: '/owner/rounds', label: 'Open Kongsi rounds', icon: Users },
+  { href: '/owner/kongsi', label: 'My Kongsi', icon: Handshake },
+  { href: '/owner/pickups', label: 'Pickups', icon: PackageOpen },
+  { href: '/owner/savings', label: 'Savings', icon: PiggyBank },
+  { href: '/owner/money', label: 'Money history', icon: Wallet },
+  { href: '/owner/usual-list', label: 'Your usual list', icon: ListChecks },
+  { href: '/owner/settings', label: 'Settings', icon: Settings },
 ] as const;
 
 export default async function OwnerHomePage() {
@@ -40,7 +50,7 @@ export default async function OwnerHomePage() {
   const { basket, nextPickup, savingsThisMonth } = home;
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-bold">{session.membership.orgName}</h1>
+      <h1 className="text-[1.75rem] leading-tight font-bold">{session.membership.orgName}</h1>
       {!settings.setupCompleted ? (
         <section className="border-accent bg-accent/15 flex flex-col gap-3 rounded-2xl border-2 p-5">
           <h2 className="text-lg font-semibold">Finish setup</h2>
@@ -77,15 +87,21 @@ export default async function OwnerHomePage() {
       />
       <BalanceCard balanceSen={home.balanceSen} pendingApprovals={home.pendingApprovals} />
       <nav aria-label="Owner pages">
-        <ul className="bg-card flex flex-col divide-y rounded-2xl border">
-          {LINKS.map((l) => (
-            <li key={l.href}>
+        <ul className="bg-card flex flex-col divide-y overflow-hidden rounded-2xl border">
+          {LINKS.map(({ href, label, icon: Icon }) => (
+            <li key={href}>
               <Link
-                href={l.href}
-                className="focus-visible:ring-ring/60 hover:bg-muted flex min-h-12 items-center justify-between rounded-2xl px-4 text-base font-semibold outline-none focus-visible:ring-3"
+                href={href}
+                className="group focus-visible:ring-ring/60 hover:bg-muted/60 flex min-h-13 items-center gap-3 px-4 text-base font-semibold transition-colors outline-none focus-visible:ring-3 focus-visible:ring-inset"
               >
-                {l.label}
-                <ChevronRight aria-hidden="true" className="size-5" />
+                <span className="bg-primary-soft text-primary-hover grid size-8 shrink-0 place-items-center rounded-lg">
+                  <Icon aria-hidden="true" className="size-[18px]" />
+                </span>
+                <span className="mr-auto">{label}</span>
+                <ChevronRight
+                  aria-hidden="true"
+                  className="text-muted-foreground size-5 transition-transform group-hover:translate-x-0.5"
+                />
               </Link>
             </li>
           ))}

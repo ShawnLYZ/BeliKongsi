@@ -28,7 +28,7 @@ export default async function SupplierOrderPage({ params }: { params: Promise<{ 
       <Link href="/supplier" className={`${BUTTON_QUIET} self-start px-0`}>
         ← All orders
       </Link>
-      <h1 className="text-2xl font-bold">Order</h1>
+      <h1 className="text-[1.75rem] leading-tight font-bold">Order</h1>
       <OrderCard order={order} today={mytDate(clock.now())} linkToDetail={false} />
       <p className="text-muted-foreground text-base">
         BeliKongsi has already collected payment from its shops for this order. You are paid for the

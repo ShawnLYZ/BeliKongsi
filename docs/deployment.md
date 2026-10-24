@@ -195,6 +195,13 @@ Rotate after the demo setup works, because the key file's contents were shared i
 
 After you change a Vercel variable, redeploy. Then run `pnpm prod:check` again.
 
+## P1 notes
+
+- **Jobs runner.** `/api/jobs/run` (called with `CRON_SECRET`, by the daily Vercel cron or on page loads) also delivers due webhooks, with retries after 1 minute, 5 minutes, 30 minutes, 2 hours and 12 hours, and deletes delivery photos older than 90 days. No new environment variable is needed.
+- **Integration API.** Every `/api/integrations/v1/*` call must send the simulated Orbyte app credential in the `X-Orbyte-App-Id` header, or it is refused with `401 APP_ID_REQUIRED`. Webhook URLs must be HTTPS to a public address. See [integrations.md](integrations.md).
+- **Webhook demo receiver.** In demo mode the app receives its own webhooks at `/api/demo/webhook-receiver` (for example `https://<your-app>.vercel.app/api/demo/webhook-receiver`). Register that URL, skip to cut-off, and the Ops events page shows the delivery and a valid signature. "Reset demo data" wipes every webhook subscription, the demo receiver's included, so register it again after each reset (step 4 of the pre-demo checklist below).
+- **Before a demo.** Also check the About page (`/about`) loads and the Ops events page shows the webhook receipt.
+
 ## 6. Pre-demo checklist
 
 Before every demo:
@@ -202,7 +209,17 @@ Before every demo:
 1. Run the AI accuracy set: `pnpm ai:accuracy` (needs `GEMINI_API_KEY`).
 2. Run the end-to-end test against the deployed URL: `BASE_URL=https://<your-app>.vercel.app pnpm e2e` (on PowerShell, set `$env:BASE_URL` first).
 3. Press "Reset demo data" in the deployed app.
-4. "Verify log" shows ✅.
-5. The money overview shows ✅.
+4. Register the demo webhook receiver again, because the reset removed its subscription:
+
+   ```bash
+   curl -X POST https://<your-app>.vercel.app/api/integrations/v1/webhooks \
+     -H "X-Orbyte-App-Id: orbyte-demo" -H "Content-Type: application/json" \
+     -d '{"url":"https://<your-app>.vercel.app/api/demo/webhook-receiver","eventTypes":["round.closed","round.cancelled","refund.issued"]}'
+   ```
+
+   The answer is `201` with the subscription (keep the secret only if you need it; the demo receiver checks it by itself). The Ops events page lists it.
+
+5. "Verify log" shows ✅.
+6. The money overview shows ✅.
 
 Also run `pnpm prod:check` after any change to the database or to the Vercel variables.

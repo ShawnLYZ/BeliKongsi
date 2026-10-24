@@ -30,7 +30,7 @@ export function ClaimReview({ claim }: { claim: ClaimView }) {
   return (
     <div className="flex flex-col gap-5">
       <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold">Claim review</h1>
+        <h1 className="text-[1.75rem] leading-tight font-bold">Claim review</h1>
         <p className="text-base">
           Reported by <strong>{claim.check.submittedBy ?? 'the shop'}</strong> on{' '}
           <time dateTime={claim.check.submittedAt}>
@@ -57,7 +57,13 @@ export function ClaimReview({ claim }: { claim: ClaimView }) {
                     · refund <Money sen={l.refundSen} />
                   </p>
                   {l.photoUrls.length === 0 ? (
-                    <p className="text-muted-foreground text-base">No photos were added.</p>
+                    <p className="text-muted-foreground text-base">
+                      {l.photosDeleted === 0
+                        ? 'No photos were added.'
+                        : l.photosExpired === l.photosDeleted
+                          ? 'Photo deleted after 90 days'
+                          : 'Photo deleted'}
+                    </p>
                   ) : (
                     <ul className="flex flex-wrap gap-3">
                       {l.photoUrls.map((url, j) => (

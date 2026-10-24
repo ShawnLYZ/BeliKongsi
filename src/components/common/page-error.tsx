@@ -13,7 +13,7 @@ export function PageError({ retry }: { retry: () => void }) {
       role="alert"
       className="bg-card text-card-foreground flex max-w-xl flex-col gap-4 rounded-2xl border p-5"
     >
-      <h1 className="text-2xl font-bold">This page could not load</h1>
+      <h1 className="text-[1.75rem] leading-tight font-bold">This page could not load</h1>
       <p className="text-base">
         Something went wrong on our side while loading it. Try again, or go back to your home
         screen.

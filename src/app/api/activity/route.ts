@@ -1,4 +1,4 @@
-import { queryLog, subjectTimeline } from '@/server/modules/activity/query';
+import { logFiltersFromParams, queryLog, subjectTimeline } from '@/server/modules/activity/query';
 import { json, route } from '@/server/platform/http';
 import { parsePage } from '@/server/platform/pagination';
 
@@ -19,6 +19,7 @@ export const GET = route({ auth: 'session' }, async ({ deps, caller, request }) 
     await queryLog(deps, caller, {
       ...(subjectType ? { subjectType } : {}),
       ...(subjectId ? { subjectId } : {}),
+      ...logFiltersFromParams(params),
       ...page,
     }),
   );

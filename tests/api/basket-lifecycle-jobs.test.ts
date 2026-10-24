@@ -213,6 +213,8 @@ describe('jobs runner', () => {
         checkReminders: 0,
         uncheckedClosed: 0,
         operationalReminders: 0,
+        deliveredWebhooks: 0,
+        deletedPhotos: 0,
       });
     }
   });
@@ -239,6 +241,8 @@ describe('jobs runner', () => {
       checkReminders: 0,
       uncheckedClosed: 0,
       operationalReminders: 0,
+      deliveredWebhooks: 0,
+      deletedPhotos: 0,
     });
   });
 });

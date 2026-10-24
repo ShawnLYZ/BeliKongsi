@@ -1,6 +1,10 @@
 import type { ActorType, Prisma, Role } from '@/generated/prisma/client';
 import type { Caller } from '@/server/platform/caller';
 import type { AppDeps } from '@/server/platform/deps';
+import { badRequest } from '@/server/platform/errors';
+import { requireOps } from '@/server/platform/permissions';
+import { mytDate, mytInstant } from '@/lib/time';
+import { UUID } from '@/server/platform/ids';
 import { toPage } from '@/server/platform/pagination';
 import { relatedSubjects, type Subject } from './related';
 
@@ -39,12 +43,60 @@ function stripMoney(value: Prisma.JsonValue | null): Prisma.JsonValue | null {
   return value;
 }
 
+/** Filters shared by the log page, the API and the CSV export. */
+export type LogFilters = {
+  /** First day, `YYYY-MM-DD` in Malaysia time, inclusive. */
+  from?: string;
+  /** Last day, `YYYY-MM-DD` in Malaysia time, inclusive. */
+  to?: string;
+  /** The person who acted (a user id). */
+  actorUserId?: string;
+  action?: string;
+  subjectType?: string;
+  subjectId?: string;
+};
+
+/** Midnight MYT at the start of a `YYYY-MM-DD` day, or a 400 for anything that is not a real date. */
+function dayStart(value: string, name: string): Date {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (m) {
+    const at = mytInstant(Number(m[1]), Number(m[2]), Number(m[3]), 0, 0);
+    if (mytDate(at) === value) return at;
+  }
+  throw badRequest(`"${name}" must be a date written YYYY-MM-DD.`);
+}
+
+/** The where-conditions for the filters, to be combined (AND) with a role's visibility rule. */
+export function logFilterConditions(filters: LogFilters): Prisma.ActivityLogEntryWhereInput[] {
+  const out: Prisma.ActivityLogEntryWhereInput[] = [];
+  const range: Prisma.DateTimeFilter = {};
+  if (filters.from) range.gte = dayStart(filters.from, 'from');
+  if (filters.to) range.lt = new Date(dayStart(filters.to, 'to').getTime() + 86_400_000);
+  if (range.gte || range.lt) out.push({ occurredAt: range });
+  if (filters.actorUserId) {
+    if (!UUID.test(filters.actorUserId)) throw badRequest('"actorUserId" must be a user id.');
+    out.push({ actorUserId: filters.actorUserId });
+  }
+  if (filters.action) out.push({ action: filters.action });
+  if (filters.subjectType) out.push({ subjectType: filters.subjectType });
+  if (filters.subjectId) out.push({ subjectId: filters.subjectId });
+  return out;
+}
+
+/** Reads the filter query parameters; empty values count as absent. */
+export function logFiltersFromParams(params: URLSearchParams): LogFilters {
+  const out: LogFilters = {};
+  for (const key of ['from', 'to', 'actorUserId', 'action', 'subjectType', 'subjectId'] as const) {
+    const value = params.get(key);
+    if (value) out[key] = value;
+  }
+  return out;
+}
+
 export async function queryLog(
   deps: AppDeps,
   caller: Caller,
-  filter: {
-    subjectType?: string;
-    subjectId?: string;
+  filter: LogFilters & {
     /** Entries about any of these subjects; used instead of `subjectType` and `subjectId`. */
     subjects?: Subject[];
     cursor: string | null;
@@ -61,12 +113,11 @@ export async function queryLog(
     else if (role === 'supplier') where.supplierId = supplierId ?? '';
     // ops sees everything
   }
-  if (filter.subjects) {
-    where.OR = filter.subjects.map((s) => ({ subjectType: s.type, subjectId: s.id }));
-  } else {
-    if (filter.subjectType) where.subjectType = filter.subjectType;
-    if (filter.subjectId) where.subjectId = filter.subjectId;
-  }
+  // Combined with the visibility rule above (staff are already limited to their own actions).
+  const { subjects, subjectType, subjectId, ...rest } = filter;
+  if (subjects) where.OR = subjects.map((s) => ({ subjectType: s.type, subjectId: s.id }));
+  const conditions = logFilterConditions(subjects ? rest : { ...rest, subjectType, subjectId });
+  if (conditions.length) where.AND = conditions;
   if (filter.cursor !== null) {
     if (!/^\d+$/.test(filter.cursor)) return { items: [], nextCursor: null };
     where.seq = { lt: BigInt(filter.cursor) };
@@ -127,5 +178,17 @@ export async function subjectTimeline(
     ...(subjects ? { subjects } : {}),
     cursor: page.cursor ?? null,
     limit: page.limit ?? 50,
+  });
+}
+
+/** Everyone who could appear in the log, by name, for the Ops person filter (Ops only). */
+export async function logPeople(
+  deps: AppDeps,
+  caller: Caller,
+): Promise<{ id: string; displayName: string }[]> {
+  requireOps(caller);
+  return deps.prisma.user.findMany({
+    select: { id: true, displayName: true },
+    orderBy: [{ displayName: 'asc' }, { id: 'asc' }],
   });
 }

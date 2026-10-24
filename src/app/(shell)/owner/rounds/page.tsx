@@ -27,7 +27,7 @@ export default async function OwnerRoundsPage() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-2xl font-bold">Open Kongsi rounds</h1>
+        <h1 className="text-[1.75rem] leading-tight font-bold">Open Kongsi rounds</h1>
         <p className="text-base">
           The more shops order, the lower the price for everyone. Prices are per unit.
         </p>

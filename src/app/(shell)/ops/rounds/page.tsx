@@ -15,7 +15,7 @@ export default async function OpsRoundsPage() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-2xl font-bold">Rounds board</h1>
+        <h1 className="text-[1.75rem] leading-tight font-bold">Rounds board</h1>
         <p className="mt-1 text-base">Every Kongsi round by status, newest cut-off first.</p>
       </div>
       {board.columns.every((col) => col.rounds.length === 0) ? (

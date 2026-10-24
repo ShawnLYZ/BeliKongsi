@@ -80,7 +80,7 @@ export function RoundDetail({
           className="w-40"
         />
         <div>
-          <h1 className="text-2xl font-bold">{round.name}</h1>
+          <h1 className="text-[1.75rem] leading-tight font-bold">{round.name}</h1>
           <p className="text-base">{round.packDescription}</p>
           {supplierName ? (
             <p className="text-muted-foreground text-base">From {supplierName}</p>

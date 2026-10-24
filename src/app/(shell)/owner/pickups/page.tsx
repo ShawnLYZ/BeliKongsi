@@ -18,7 +18,7 @@ export default async function OwnerPickupsPage() {
   ]);
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-bold">Pickups</h1>
+      <h1 className="text-[1.75rem] leading-tight font-bold">Pickups</h1>
       {upcoming.items.length === 0 ? (
         <EmptyState
           title="Nothing on its way"

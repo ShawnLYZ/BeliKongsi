@@ -16,7 +16,7 @@ export default async function OpsMoneyPage() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-2xl font-bold">Money overview</h1>
+        <h1 className="text-[1.75rem] leading-tight font-bold">Money overview</h1>
         <p className="mt-1 text-base">
           Where every sen sits now, and the checks that prove it balances. To check the activity log
           has not been changed, use{' '}

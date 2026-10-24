@@ -25,7 +25,7 @@ export function SupplierOrderDetail({
         <p className="text-muted-foreground text-base font-semibold">
           Supplier order · {supplierName} · {order.hubName}
         </p>
-        <h1 className="text-2xl font-bold">{order.productName}</h1>
+        <h1 className="text-[1.75rem] leading-tight font-bold">{order.productName}</h1>
         <p className="mt-1 text-base font-semibold">{orderStatusLabel(order.status)}</p>
         <p className="mt-1 text-base">
           <Link href={`/ops/rounds/${order.roundId}`} className={LINK}>

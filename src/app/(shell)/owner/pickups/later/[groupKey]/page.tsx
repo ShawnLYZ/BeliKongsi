@@ -28,7 +28,7 @@ export default async function OwnerPickupGroupPage({
   if (!group) notFound();
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-bold">Your goods on the way</h1>
+      <h1 className="text-[1.75rem] leading-tight font-bold">Your goods on the way</h1>
       <LateBanner pickup={group} showCancelNote />
       <PickupDetail pickup={group} />
       <LateCancelList pickup={group} />

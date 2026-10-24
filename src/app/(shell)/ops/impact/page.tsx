@@ -14,7 +14,7 @@ export default async function OpsImpactPage() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-2xl font-bold">Impact</h1>
+        <h1 className="text-[1.75rem] leading-tight font-bold">Impact</h1>
         <p className="mt-1 text-base">
           The numbers the pilot is judged on, worked out from the live data each time you open this
           page. A dash means there is nothing to measure yet.

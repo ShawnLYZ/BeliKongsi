@@ -49,6 +49,11 @@ export async function createTestDeps(opts: { now?: string } = {}): Promise<{
       STORAGE_ADAPTER: 'local',
       LOCAL_STORAGE_DIR: storageDir,
     },
+    // Tests never reach the network: a test that delivers webhooks swaps in its own fetch.
+    http: {
+      fetch: () => Promise.reject(new Error('Network access is off in tests.')),
+      lookup: async () => ['93.184.216.34'],
+    },
   };
   return {
     deps,

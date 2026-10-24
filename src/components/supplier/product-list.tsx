@@ -18,7 +18,7 @@ export function ProductList({ products }: { products: SupplierProductView[] }) {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-2xl font-bold">Products and tiers</h1>
+        <h1 className="text-[1.75rem] leading-tight font-bold">Products and tiers</h1>
         <p className="mt-1 text-base">
           Change your prices, tiers and schedules here. A round that is open keeps its prices, so a
           change reaches shops from the next round.

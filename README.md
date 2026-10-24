@@ -2,7 +2,7 @@
 
 Beli sama-sama, harga borong · Buy together, pay wholesale
 
-**Status:** P0 is complete: the whole demo journey works from sign-in to verified savings. P1 (extras such as supplier product editing, withdrawals and webhooks) is in progress.
+**Status:** P0 and P1 complete. The whole demo journey works from sign-in to verified savings, and the P1 extras listed under "P1 features" are built.
 
 > **Everything here is made up.** Every business, person and product is fictional, and each business is named "... Contoh". Payments, payouts, logistics, sign-in and WhatsApp are **simulated**: no real money moves and no real message is sent. Demo mode shows a "Made-up data" banner.
 
@@ -24,6 +24,25 @@ BeliKongsi turns weekly restocking into one tap. Each product from each supplier
 - Shops stay anonymous to each other and to suppliers.
 
 AI only reads messy text into a draft that a person confirms. Prices, refunds and approvals follow fixed rules (the Kongsi Engine).
+
+## P1 features
+
+What P1 added on top of the P0 journey, by milestone:
+
+- **M11, owner automation and money.** Auto-approve for routine weeks under a rule the owner controls, withdrawing the BeliKongsi balance, a monthly summary with an estimate of time saved, a data export (ZIP) and a clean shop deletion.
+- **M12, delivery exceptions.** Delay notices and a full-refund cancel of a late item after 3 days, partial collection of goods that arrive in parts, reminders for uncollected goods and unchecked deliveries, and chasers for suppliers and Ops.
+- **M13, supplier self-service.** Suppliers create and edit products, price tiers, buy-alone prices, schedules and photos (changes apply from the next round), and import a price list by pasting or photographing it, with AI drafting a table the supplier confirms.
+- **M14, AI photo and impact.** Owners build the usual list from a photo of an old invoice (the photo is never stored), and Ops get an impact panel: time to approve, approval rate, AI acceptance, claim rate and supplier reliability.
+- **M15, governance and integration.**
+  - Ops filter the activity log by date, person, action and subject, and export it as CSV. Each row carries the hash of the stored entry. A text cell that starts with `=`, `+`, `-`, `@`, a tab or a carriage return gets a leading `'` so spreadsheets don't run it as a formula, so remove that `'` before checking a row against the hash chain.
+  - Ops cancel an open round in an emergency, with automatic refunds.
+  - Delivery photos are deleted after 90 days.
+  - Signed webhooks for other Orbyte apps, with retries and an SSRF guard, a demo receiver and an Ops events page. See [docs/integrations.md](docs/integrations.md).
+  - An [About page](#the-about-page) for judges.
+
+### The About page
+
+`/about` explains what BeliKongsi is and what is simulated. It is linked from the footer of the signed-in screens and from the sign-in page.
 
 ## The five-step journey
 
@@ -188,7 +207,7 @@ curl -X POST http://localhost:3000/api/engine/v1/quote \
   -d '{"tiers":[{"minQuantity":20,"unitPriceSen":15800},{"minQuantity":50,"unitPriceSen":15200},{"minQuantity":100,"unitPriceSen":14600}],"feeBps":200,"unitShippingSen":293,"quantity":6,"currentRoundTotal":99,"unitName":"carton"}'
 ```
 
-Full request and response examples, limits and the error format are in [docs/engine-api.md](docs/engine-api.md).
+Full request and response examples, limits and the error format are in [docs/engine-api.md](docs/engine-api.md). Webhooks for other Orbyte apps are described in [docs/integrations.md](docs/integrations.md).
 
 ## Run the tests
 

@@ -9,9 +9,12 @@ import { Timeline } from '@/components/common/timeline';
 export function ActivityFeed({
   initialItems,
   initialCursor,
+  filterQuery = '',
 }: {
   initialItems: LogEntryView[];
   initialCursor: string | null;
+  /** The page's filters as a query string, repeated on every next-page request. */
+  filterQuery?: string;
 }) {
   const [items, setItems] = useState(initialItems);
   const [cursor, setCursor] = useState(initialCursor);
@@ -22,7 +25,7 @@ export function ActivityFeed({
     setLoading(true);
     try {
       const page = await apiFetch<{ items: LogEntryView[]; nextCursor: string | null }>(
-        `/api/activity?cursor=${encodeURIComponent(cursor)}`,
+        `/api/activity?cursor=${encodeURIComponent(cursor)}${filterQuery ? `&${filterQuery}` : ''}`,
       );
       setItems((list) => [...list, ...page.items]);
       setCursor(page.nextCursor);

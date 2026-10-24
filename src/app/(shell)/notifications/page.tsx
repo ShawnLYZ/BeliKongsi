@@ -25,7 +25,7 @@ export default async function NotificationsPage() {
   });
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-bold">Notifications</h1>
+      <h1 className="text-[1.75rem] leading-tight font-bold">Notifications</h1>
       {page.items.length === 0 ? (
         <EmptyState
           title="No notifications yet"

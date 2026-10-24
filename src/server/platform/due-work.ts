@@ -1,4 +1,5 @@
 import { after } from 'next/server';
+import { deliverDueWebhooks } from '@/server/modules/integration/webhooks';
 import { runDueJobs } from '@/server/modules/jobs/run';
 import type { AppDeps } from './deps';
 
@@ -20,4 +21,27 @@ export function scheduleDueWork(deps: AppDeps): void {
       console.error('Due work failed:', error instanceof Error ? error.message : 'unknown error');
     }
   });
+}
+
+/**
+ * Sends due webhook deliveries after the response, so an event a request just committed (such as
+ * a demo round close) reaches its receivers without waiting for the next jobs run. A failure is
+ * logged and never reaches the caller. Outside a request scope (scripts, tests) `after` is not
+ * available and nothing is scheduled; the due jobs deliver instead.
+ */
+export function scheduleWebhookDelivery(deps: AppDeps): void {
+  try {
+    after(async () => {
+      try {
+        await deliverDueWebhooks(deps);
+      } catch (error) {
+        console.error(
+          'Webhook delivery failed:',
+          error instanceof Error ? error.message : 'unknown error',
+        );
+      }
+    });
+  } catch {
+    // No request scope: the next runDueJobs delivers.
+  }
 }

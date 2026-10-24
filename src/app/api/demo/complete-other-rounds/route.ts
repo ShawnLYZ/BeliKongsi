@@ -1,9 +1,13 @@
 import { completeOtherRounds } from '@/server/modules/demo/complete-other-rounds';
+import { scheduleWebhookDelivery } from '@/server/platform/due-work';
 import { json, route } from '@/server/platform/http';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-export const POST = route({ auth: 'session', idempotent: true }, async ({ deps, caller }) =>
-  json(await completeOtherRounds(deps, caller)),
-);
+export const POST = route({ auth: 'session', idempotent: true }, async ({ deps, caller }) => {
+  const result = await completeOtherRounds(deps, caller);
+  // The closes just emitted round.closed: send it to webhook receivers without waiting.
+  scheduleWebhookDelivery(deps);
+  return json(result);
+});

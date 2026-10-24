@@ -11,7 +11,7 @@ export default async function StaffHomePage() {
   const session = requirePageRole(await getPageSession(), ['staff']);
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-bold">Hi, {session.displayName}</h1>
+      <h1 className="text-[1.75rem] leading-tight font-bold">Hi, {session.displayName}</h1>
       <nav aria-label="Staff tasks" className="flex flex-col gap-4">
         <Link
           href="/staff/add"

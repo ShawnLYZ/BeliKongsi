@@ -5,31 +5,34 @@ import { forbidden } from '@/server/platform/errors';
 import type { TxContext } from '@/server/platform/tx';
 
 // PRD section 21.
-export type EventType =
-  | 'round.opened'
-  | 'round.closed'
-  | 'round.cancelled'
-  | 'basket.drafted'
-  | 'basket.approved'
-  | 'basket.skipped'
-  | 'basket.expired'
-  | 'participation.joined'
-  | 'participation.cancelled'
-  | 'participation.dropped'
-  | 'refund.issued'
-  | 'supplier_order.approved'
-  | 'supplier_order.confirmed'
-  | 'supplier_order.rejected'
-  | 'supplier_order.dispatched'
-  | 'hub_check.recorded'
-  | 'supplier_payout.released'
-  | 'consignment.status_changed'
-  | 'pickup.ready'
-  | 'pickup.collected'
-  | 'delivery.checked'
-  | 'claim.submitted'
-  | 'claim.decided'
-  | 'balance.withdrawn';
+export const EVENT_TYPES = [
+  'round.opened',
+  'round.closed',
+  'round.cancelled',
+  'basket.drafted',
+  'basket.approved',
+  'basket.skipped',
+  'basket.expired',
+  'participation.joined',
+  'participation.cancelled',
+  'participation.dropped',
+  'refund.issued',
+  'supplier_order.approved',
+  'supplier_order.confirmed',
+  'supplier_order.rejected',
+  'supplier_order.dispatched',
+  'hub_check.recorded',
+  'supplier_payout.released',
+  'consignment.status_changed',
+  'pickup.ready',
+  'pickup.collected',
+  'delivery.checked',
+  'claim.submitted',
+  'claim.decided',
+  'balance.withdrawn',
+] as const;
+
+export type EventType = (typeof EVENT_TYPES)[number];
 
 const FORBIDDEN_KEY = /name|phone|email|address/i;
 
@@ -54,8 +57,23 @@ export async function emitEvent(
   data: Record<string, unknown>,
 ): Promise<void> {
   assertNoContactKeys(data, 'data');
-  await ctx.tx.integrationEvent.create({
+  const event = await ctx.tx.integrationEvent.create({
     data: { type, version: 1, occurredAt: ctx.now, data: data as Prisma.InputJsonObject },
+  });
+  // Queued in the same transaction, so a delivery exists exactly when its event does.
+  const subscriptions = await ctx.tx.webhookSubscription.findMany({
+    where: { active: true, eventTypes: { has: type } },
+    select: { id: true },
+  });
+  if (subscriptions.length === 0) return;
+  await ctx.tx.webhookDelivery.createMany({
+    data: subscriptions.map((s) => ({
+      subscriptionId: s.id,
+      eventId: event.id,
+      attempt: 0,
+      status: 'pending' as const,
+      nextAttemptAt: ctx.now,
+    })),
   });
 }
 

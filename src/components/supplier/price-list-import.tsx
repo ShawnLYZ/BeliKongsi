@@ -225,7 +225,7 @@ export function PriceListImport({ supplierId }: { supplierId: string }) {
         ← All products
       </Link>
       <div>
-        <h1 className="text-2xl font-bold">Import a price list</h1>
+        <h1 className="text-[1.75rem] leading-tight font-bold">Import a price list</h1>
         <p className="mt-1 text-base">
           Paste your price list or add a photo of it. BeliKongsi drafts the tiers for you to check.
           Nothing is saved until you confirm.

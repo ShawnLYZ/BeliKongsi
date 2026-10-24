@@ -17,7 +17,7 @@ export default async function StaffAddPage() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-2xl font-bold">Add to next basket</h1>
+        <h1 className="text-[1.75rem] leading-tight font-bold">Add to next basket</h1>
         <p className="text-base">Your owner approves everything you add before it is ordered.</p>
       </div>
       {basket ? (

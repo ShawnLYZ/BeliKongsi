@@ -15,7 +15,7 @@ export default async function OpsHomePage() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-2xl font-bold">Approvals</h1>
+        <h1 className="text-[1.75rem] leading-tight font-bold">Approvals</h1>
         <p className="mt-1 text-base">
           Nothing consequential happens without you: approve each supplier order against its
           evidence, review each claim with its photos, and check each deletion request.

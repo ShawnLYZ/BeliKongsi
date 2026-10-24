@@ -18,7 +18,7 @@ export function EmptyState({
   return (
     <section
       className={cn(
-        'border-input/60 bg-card text-card-foreground rounded-2xl border border-dashed p-5',
+        'border-input/45 bg-card/55 text-card-foreground rounded-2xl border border-dashed p-5',
         className,
       )}
     >

@@ -10,7 +10,12 @@
   --color-topbar-foreground: var(--topbar-foreground);
   --color-banner: var(--banner);
   --color-banner-foreground: var(--banner-foreground);
-  --color-card-top: var(--card-top);
+  --color-primary-soft: var(--primary-soft);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-ink: var(--accent-ink);
+  --color-topbar-muted: var(--topbar-muted);
+  --shadow-surface: var(--shadow-surface);
+  --shadow-overlay: var(--shadow-overlay);
   --font-heading: var(--font-sans);
   --font-sans: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);
@@ -54,22 +59,25 @@
 }
 
 :root {
-  --background: #fbf5e6;
-  --foreground: #1c1917;
-  --card: #fffdf7;
-  --card-foreground: #1c1917;
-  --popover: #fffdf7;
-  --popover-foreground: #1c1917;
+  --background: #f8f3e6;
+  --foreground: #1a1714;
+  --card: #fffdf8;
+  --card-foreground: #1a1714;
+  --popover: #fffdf8;
+  --popover-foreground: #1a1714;
   --primary: #0f766e;
   --primary-foreground: #ffffff;
-  --secondary: #f3e9cf;
-  --secondary-foreground: #1c1917;
-  --muted: #f3e9cf;
-  --muted-foreground: #57534e;
+  --primary-soft: #e2efe9;
+  --secondary: #f1e8d1;
+  --secondary-foreground: #1a1714;
+  --muted: #f1e8d1;
+  --muted-foreground: #574f45;
   --accent: #f5a623;
-  --accent-foreground: #1c1917;
+  --accent-foreground: #1a1714;
+  --accent-soft: #fcedc9;
+  --accent-ink: #7c4a03;
   --destructive: oklch(0.505 0.213 27.518); /* red-700: AA on the cream and muted backgrounds */
-  --border: #e6dcc0;
+  --border: #e6dbc0;
   --input: #8a7f66;
   --ring: #0f766e;
   --chart-1: oklch(0.87 0 0);
@@ -77,7 +85,7 @@
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --radius: 1rem;
+  --radius: 0.5rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -89,9 +97,12 @@
   --primary-hover: #0b5f59;
   --topbar: #10243f;
   --topbar-foreground: #ffffff;
+  --topbar-muted: #b9c6d8;
   --banner: #f5a623;
-  --banner-foreground: #1c1917;
-  --card-top: #f5a623;
+  --banner-foreground: #1a1714;
+  /* One elevation for every raised surface: a hairline border plus a short, warm contact shadow. */
+  --shadow-surface: 0 1px 2px rgb(74 56 18 / 0.05), 0 2px 6px -2px rgb(74 56 18 / 0.07);
+  --shadow-overlay: 0 12px 32px -8px rgb(16 36 63 / 0.28), 0 2px 6px rgb(16 36 63 / 0.08);
 }
 
 .dark {
@@ -132,10 +143,79 @@
   * {
     @apply border-border outline-ring/50;
   }
-  body {
-    @apply bg-background text-foreground;
-  }
   html {
     @apply font-sans;
+    scrollbar-color: color-mix(in oklch, var(--input), transparent 45%) transparent;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    @apply bg-background text-foreground;
+    text-rendering: optimizeLegibility;
+  }
+  ::selection {
+    background: color-mix(in oklch, var(--primary), transparent 78%);
+    color: var(--foreground);
+  }
+  input,
+  textarea {
+    caret-color: var(--primary);
+  }
+  input[type='radio'],
+  input[type='checkbox'],
+  progress {
+    accent-color: var(--primary);
+  }
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.018em;
+    text-wrap: balance;
+  }
+  h1 {
+    letter-spacing: -0.026em;
+  }
+  p {
+    text-wrap: pretty;
+  }
+  a {
+    text-underline-offset: 0.22em;
+    text-decoration-thickness: 1px;
+  }
+  dd,
+  td,
+  output {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/*
+ * Raised surfaces. Screens build cards from utilities ("bg-card rounded-2xl border"), so the shared
+ * contact shadow is attached here once rather than repeated in ninety class strings. Dashed empty
+ * states stay flat on purpose: they are placeholders, not objects.
+ */
+@layer components {
+  .bg-card.border:not(.border-dashed),
+  .bg-card.border-2:not(.border-dashed) {
+    box-shadow: var(--shadow-surface);
+  }
+}
+
+/* Sign-in: the example round's bar fills once, easing out like a pour. */
+@keyframes tier-fill {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+.tier-fill {
+  animation: tier-fill 1.4s cubic-bezier(0.16, 1, 0.3, 1) 0.25s both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tier-fill {
+    animation: none;
   }
 }

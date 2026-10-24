@@ -5,6 +5,7 @@ import {
   deletionEvidenceOf,
   openItemCount,
 } from '@/components/ops/deletion-evidence';
+import { deliveryStatusLabel } from '@/components/ops/webhooks-panel';
 import { readMinutes } from '@/components/settings/minutes';
 import { duration } from '@/lib/duration';
 
@@ -95,5 +96,14 @@ describe('readMinutes', () => {
     for (const bad of ['', '-1', '1.5', '601', 'abc', '1e2']) {
       expect(readMinutes(bad)).toHaveProperty('error');
     }
+  });
+});
+
+describe('deliveryStatusLabel', () => {
+  it('shows a pending delivery not yet tried as queued and one after a failure as waiting to retry', () => {
+    expect(deliveryStatusLabel({ status: 'pending', attempt: 0 })).toBe('Queued');
+    expect(deliveryStatusLabel({ status: 'pending', attempt: 1 })).toBe('Waiting to retry');
+    expect(deliveryStatusLabel({ status: 'succeeded', attempt: 1 })).toBe('Delivered');
+    expect(deliveryStatusLabel({ status: 'failed', attempt: 6 })).toBe('Gave up');
   });
 });

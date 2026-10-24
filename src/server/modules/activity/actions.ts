@@ -24,6 +24,7 @@ export const ACTIONS = [
   'price_list.ai_suggested',
   'price_list.confirmed',
   'round.closed',
+  'round.cancelled',
   'round.completed',
   'participation.joined',
   'participation.cancelled',
@@ -55,12 +56,16 @@ export const ACTIONS = [
   'demo.complete_other_rounds',
   'demo.reset',
   'log.verified',
+  'log.exported',
   'auto_approve.enabled',
   'auto_approve.disabled',
   'balance.withdrawn',
   'data.exported',
   'data.deletion_requested',
   'shop.anonymised',
+  'webhook.subscribed',
+  'webhook.unsubscribed',
+  'photo.deleted',
 ] as const;
 
 export type ActionCode = (typeof ACTIONS)[number];

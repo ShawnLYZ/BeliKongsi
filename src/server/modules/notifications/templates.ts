@@ -195,6 +195,11 @@ export const TEMPLATES = defineTemplates({
         : `BeliKongsi cancelled the ${data.shortName} order this week. Full refund: ${formatRM(data.refundSen)}.`;
     return () => ({ title: 'Order cancelled, full refund', body: text, whatsappText: text });
   },
+  // Owner only: Ops cancelled the open round in an emergency; one message per shop.
+  'round.cancelled_emergency': (data: { shortName: string; reason: string; refundSen: number }) => {
+    const text = `BeliKongsi cancelled this week's ${data.shortName} Kongsi: ${data.reason}. Full refund: ${formatRM(data.refundSen)}.`;
+    return () => ({ title: 'Kongsi cancelled, full refund', body: text, whatsappText: text });
+  },
   // Owner only: the supplier delivered fewer good units than were ordered; one message per shop.
   'owner.shortfall': (data: {
     missingUnits: number;

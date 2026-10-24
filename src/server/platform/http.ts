@@ -16,7 +16,7 @@ export type RouteAuth = 'public' | 'session' | readonly Role[];
 const DEFAULT_MAX_BODY_BYTES = 1_048_576;
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 // Server-to-server surfaces: no browser cookie is involved, so there is no CSRF to guard.
-const ORIGIN_EXEMPT = ['/api/engine/v1/', '/api/jobs/'];
+const ORIGIN_EXEMPT = ['/api/engine/v1/', '/api/integrations/v1/', '/api/jobs/'];
 
 interface RouteOptions<TBody, TQuery, TAuth extends RouteAuth> {
   auth: TAuth;

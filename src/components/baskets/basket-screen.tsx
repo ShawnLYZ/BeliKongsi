@@ -48,7 +48,7 @@ export function BasketScreen({
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-bold">This week&apos;s basket</h1>
+        <h1 className="text-[1.75rem] leading-tight font-bold">This week&apos;s basket</h1>
         <p className="text-base">
           Status: <span className="font-semibold">{BASKET_STATUS_TEXT[basket.status]}</span>
         </p>

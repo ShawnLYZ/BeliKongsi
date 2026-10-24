@@ -5,6 +5,7 @@ import { ChevronLeft } from 'lucide-react';
 import type { PaymentView } from '@/lib/views/payments';
 import { CheckoutScreen } from '@/components/checkout/checkout-screen';
 import { PhoneColumn } from '@/components/common/phone-column';
+import { Wordmark } from '@/components/shell/brand-mark';
 import { MadeUpDataBanner } from '@/components/shell/made-up-data-banner';
 import { resolveClock } from '@/server/adapters/clock';
 import { getDemoState } from '@/server/modules/demo/demo';
@@ -39,8 +40,8 @@ export default async function CheckoutPage({ params }: { params: Promise<{ payme
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="bg-topbar text-topbar-foreground">
-        <PhoneColumn className="flex items-center justify-between gap-3 px-4 py-2">
+      <header className="bg-topbar text-topbar-foreground border-b border-white/[0.06]">
+        <PhoneColumn className="flex items-center justify-between gap-3 px-4 py-2.5">
           <Link
             href={back}
             className="focus-visible:ring-ring/60 -ml-2 inline-flex min-h-12 items-center gap-1 rounded-xl px-2 text-base font-semibold outline-none focus-visible:ring-3"
@@ -48,10 +49,10 @@ export default async function CheckoutPage({ params }: { params: Promise<{ payme
             <ChevronLeft aria-hidden="true" className="size-5" />
             Back
           </Link>
-          <p className="text-xl font-bold tracking-tight">BeliKongsi</p>
+          <Wordmark />
         </PhoneColumn>
       </header>
-      {demo.demoMode ? <MadeUpDataBanner text={demo.bannerText} /> : null}
+      {demo.demoMode ? <MadeUpDataBanner text={demo.bannerText} narrow /> : null}
       <main id="main" className="flex-1 px-4 py-5">
         <PhoneColumn>
           <CheckoutScreen payment={payment} serverNow={clock.now().toISOString()} />

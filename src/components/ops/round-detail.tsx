@@ -5,6 +5,7 @@ import { Money } from '@/components/common/money';
 import { statusWords } from '@/components/rounds/status-words';
 import { formatMyt } from '@/lib/format';
 import { cn } from '@/lib/utils';
+import { CancelRoundForm } from './cancel-round-form';
 import { CheckMark } from './check-mark';
 import {
   LINK,
@@ -42,7 +43,7 @@ export function OpsRoundDetailView({ detail }: { detail: OpsRoundDetail }) {
         <p className="text-muted-foreground text-base font-semibold">
           {round.supplierName} · {round.hubName} · {round.cycleLabel}
         </p>
-        <h1 className="text-2xl font-bold">{round.productName}</h1>
+        <h1 className="text-[1.75rem] leading-tight font-bold">{round.productName}</h1>
         <p className="mt-1 text-base">
           {statusWords(round.status)} · cut-off{' '}
           <time dateTime={round.cutoffAt}>{formatMyt(new Date(round.cutoffAt))}</time> ·{' '}
@@ -58,6 +59,8 @@ export function OpsRoundDetailView({ detail }: { detail: OpsRoundDetail }) {
           </p>
         ) : null}
       </div>
+
+      {round.status === 'open' ? <CancelRoundForm roundId={round.roundId} /> : null}
 
       <div className="grid gap-4 lg:grid-cols-3">
         <section aria-labelledby="engine-title" className="bg-card rounded-2xl border p-4">

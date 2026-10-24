@@ -22,7 +22,7 @@ export default async function OpsConsignmentsPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="flex flex-wrap items-center gap-2 text-2xl font-bold">
+        <h1 className="flex flex-wrap items-center gap-2 text-[1.75rem] leading-tight font-bold">
           Consignments <SimulatedBadge />
         </h1>
         <p className="mt-1 text-base">

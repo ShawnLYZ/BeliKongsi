@@ -7,6 +7,11 @@ const ACTION_LABELS: Record<string, string> = {
   'shell.role_switched': 'Switched business or role',
   'demo.reset': 'Demo data reset',
   'log.verified': 'Activity log verified',
+  'round.cancelled': 'Round cancelled by Ops',
+  'log.exported': 'Activity log exported',
+  'webhook.subscribed': 'Webhook added',
+  'webhook.unsubscribed': 'Webhook removed',
+  'photo.deleted': 'Photo deleted after 90 days',
 };
 
 /** "basket.line_added_by_staff" -> "Basket: line added by staff" for codes without a label yet. */

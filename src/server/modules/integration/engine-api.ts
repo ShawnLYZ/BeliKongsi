@@ -103,10 +103,16 @@ function invalidFields(fields: FieldError[]) {
   return unprocessable('INVALID_ENGINE_INPUT', 'Some fields are not valid.', { fields });
 }
 
-function logAppId(request: Request, operation: string): void {
+/** The X-Orbyte-App-Id header without control characters, at most 64 characters; null when absent. */
+export function cleanAppId(request: Request): string | null {
   const raw = request.headers.get('x-orbyte-app-id');
-  if (raw === null) return;
-  const id = raw.replace(/[\x00-\x1f\x7f]/g, '').slice(0, MAX_APP_ID_LENGTH);
+  if (raw === null) return null;
+  return raw.replace(/[\x00-\x1f\x7f]/g, '').slice(0, MAX_APP_ID_LENGTH);
+}
+
+function logAppId(request: Request, operation: string): void {
+  const id = cleanAppId(request);
+  if (id === null) return;
   console.info(`[engine-api] app=${id} op=${operation}`);
 }
 

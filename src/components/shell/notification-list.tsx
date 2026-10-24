@@ -65,12 +65,18 @@ export function NotificationList({
               key={n.id}
               className={cn(
                 'bg-card rounded-2xl border p-4',
-                unread && 'border-l-primary border-l-4',
+                unread &&
+                  'border-primary/40 bg-[color-mix(in_srgb,var(--card),var(--primary-soft)_60%)]',
               )}
             >
               <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-                <h2 className="text-base font-semibold">
-                  {unread ? <span className="sr-only">Unread: </span> : null}
+                <h2 className="flex items-center gap-2 text-base font-semibold">
+                  {unread ? (
+                    <>
+                      <span aria-hidden className="bg-primary size-2 shrink-0 rounded-full" />
+                      <span className="sr-only">Unread: </span>
+                    </>
+                  ) : null}
                   {n.title}
                 </h2>
                 <time dateTime={n.createdAt} className="text-muted-foreground text-base">

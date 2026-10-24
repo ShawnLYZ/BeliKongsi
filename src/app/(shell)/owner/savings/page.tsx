@@ -28,7 +28,7 @@ export default async function OwnerSavingsPage({
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-bold">Savings</h1>
+      <h1 className="text-[1.75rem] leading-tight font-bold">Savings</h1>
       <MonthSwitcher month={month} current={current} />
       <SavingsMonth view={view} />
       <TimeSavedCard view={view.timeSaved} />

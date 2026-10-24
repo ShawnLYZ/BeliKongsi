@@ -105,7 +105,7 @@ function ApprovalCard({
   }
 
   return (
-    <li className="border-t-card-top bg-card rounded-2xl border border-t-4 p-4">
+    <li className="border-accent bg-card rounded-2xl border p-4">
       <p className="text-muted-foreground text-base font-semibold">{TYPE_LABELS[item.type]}</p>
       <h2 className="mt-0.5 text-lg font-semibold tabular-nums">{item.summary}</h2>
       <dl className="mt-3 flex flex-col gap-3 text-base">

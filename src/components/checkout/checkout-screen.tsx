@@ -79,7 +79,7 @@ export function CheckoutScreen({
       </p>
 
       <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold">Checkout</h1>
+        <h1 className="text-[1.75rem] leading-tight font-bold">Checkout</h1>
         <p className="text-base">
           {payment.purpose === 'basket' ? 'Your weekly basket' : 'Joining a Kongsi round'}
         </p>

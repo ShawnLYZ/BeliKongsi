@@ -27,7 +27,7 @@ export default async function OwnerBasketPage() {
   if (!basket) {
     return (
       <div className="flex flex-col gap-4">
-        <h1 className="text-2xl font-bold">This week&apos;s basket</h1>
+        <h1 className="text-[1.75rem] leading-tight font-bold">This week&apos;s basket</h1>
         <EmptyState
           title="No basket this week yet"
           explanation="Your weekly basket is drafted from your usual list every Monday at 6 am. You approve and pay it here."
