@@ -37,7 +37,8 @@ export async function approveSupplierOrder(
     include: { product: true },
   });
   const hub = await tx.hub.findUniqueOrThrow({ where: { id: order.hubId } });
-  const { shortName, unitName } = round.product;
+  const { shortName } = round.product;
+  const { unitName } = round;
   const hubLabel = `${hub.region} hub`;
 
   const confirmation = await createApproval(ctx, {

@@ -16,8 +16,9 @@ export function createSupabaseStorage(opts: {
         .upload(key, bytes, { contentType, upsert: true });
       if (error) throw new Error(`Storage upload failed: ${error.message}`);
     },
-    // The SDK's signed upload URL has a fixed lifetime and cannot enforce size or type, so the
-    // bucket's own 5 MB and image-only limits apply and the server re-checks with statObject.
+    // The SDK's signed upload URL has a fixed lifetime and cannot enforce size or type. Both
+    // buckets carry their own 5 MB, JPEG/PNG/WebP-only limits (set by `pnpm prod:storage`), and
+    // the server re-checks the stored object with statObject before using it.
     async createSignedUploadUrl(bucket, key, opts) {
       const { data, error } = await client.storage
         .from(bucket)

@@ -1,3 +1,4 @@
+import type { Bucket } from '@/server/adapters/storage/types';
 import { isSafeKey, type LocalStorage } from '@/server/adapters/storage/local';
 import { route } from '@/server/platform/http';
 
@@ -15,7 +16,7 @@ const TYPES: Record<string, string> = {
 };
 
 /** Splits `bucket/key...` and checks the key is a plain path. */
-function target(path: string) {
+function target(path: string): { bucket: Bucket; key: string } | null {
   const slash = path.indexOf('/');
   if (slash < 0) return null;
   const bucket = path.slice(0, slash);
@@ -88,7 +89,7 @@ export const PUT = route(
   async ({ request, deps, params }) => {
     if (deps.env.STORAGE_ADAPTER !== 'local') return notFound();
     const t = target(params.path ?? '');
-    if (!t || t.bucket !== 'delivery-photos') return notFound();
+    if (!t) return notFound();
     const parts = signedParts(new URL(request.url));
     const storage = deps.storage as LocalStorage;
     if (!parts || parts.op !== 'put' || !storage.verifySigned('put', t.bucket, t.key, parts)) {
@@ -97,7 +98,7 @@ export const PUT = route(
     if ((request.headers.get('content-type') ?? '') !== parts.ct) {
       return refuse(422, 'UNSUPPORTED_TYPE', 'The photo type does not match the upload link.');
     }
-    // Evidence is write-once: a second upload to the same link would replace a photo.
+    // Uploads are write-once: a second upload to the same link would replace a photo.
     if (await storage.statObject(t.bucket, t.key)) {
       return refuse(409, 'ALREADY_UPLOADED', 'This photo has already been uploaded.');
     }

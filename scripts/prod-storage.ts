@@ -2,6 +2,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createClient } from '@supabase/supabase-js';
 import { exitOnError, requireEnv } from './lib/prod-env';
+import { ensureBuckets } from './lib/storage-buckets';
 
 const ASSET_DIR = 'prisma/seed/assets/products';
 const env = requireEnv('SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY');
@@ -11,30 +12,7 @@ async function main(): Promise<void> {
     auth: { persistSession: false },
   });
 
-  const { data: existing, error: listError } = await client.storage.listBuckets();
-  if (listError) throw new Error(`Could not list buckets: ${listError.message}`);
-  const have = new Set(existing.map((b) => b.name));
-
-  const wanted = [
-    { name: 'product-images', options: { public: true } },
-    {
-      name: 'delivery-photos',
-      options: {
-        public: false,
-        fileSizeLimit: 5 * 1024 * 1024,
-        allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp'],
-      },
-    },
-  ];
-  for (const b of wanted) {
-    if (have.has(b.name)) {
-      console.log(`Bucket ${b.name}: already exists`);
-      continue;
-    }
-    const { error } = await client.storage.createBucket(b.name, b.options);
-    if (error) throw new Error(`Could not create bucket ${b.name}: ${error.message}`);
-    console.log(`Bucket ${b.name}: created`);
-  }
+  for (const line of await ensureBuckets(client.storage)) console.log(line);
 
   const files = (await readdir(ASSET_DIR)).filter((f) => f.endsWith('.webp')).sort();
   for (const file of files) {

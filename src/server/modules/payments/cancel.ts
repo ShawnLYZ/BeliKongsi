@@ -115,7 +115,7 @@ export async function cancelParticipation(
       link: '/owner/kongsi',
       message: TEMPLATES['participation.cancelled']({
         quantity: part.quantity,
-        unitName: part.round.product.unitName,
+        unitName: part.round.unitName,
         shortName: part.round.product.shortName,
         refundSen: part.paidSen + deliveryFeeRefundSen,
       }),

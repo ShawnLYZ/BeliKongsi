@@ -1,4 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
+import { buildPriceListPrompt, PRICE_LIST_JSON_SCHEMA, toPriceListResult } from './price-list';
 import { buildPrompt } from './prompt';
 import { READ_RESULT_JSON_SCHEMA } from './schema';
 import { AiUnavailableError, type OrderReader, type ReadLine, type ReadResult } from './types';
@@ -55,11 +56,21 @@ function statusOf(error: unknown): number | null {
 const isTimeout = (error: unknown) =>
   error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
 
+/** One call to the model. `image` is sent as an `inlineData` part after the text. */
+export interface GenerateRequest {
+  model: string;
+  prompt: string;
+  text: string;
+  /** Base64 bytes and their type, e.g. a price-list photo. */
+  image?: { mimeType: string; data: string };
+  responseJsonSchema: object;
+}
+
 export function createGeminiOrderReader(opts: {
   apiKey: string;
   model: string;
   timeoutMs?: number;
-  generate?: (req: { model: string; prompt: string; text: string }) => Promise<string>;
+  generate?: (req: GenerateRequest) => Promise<string>;
   sleep?: (ms: number) => Promise<void>;
 }): OrderReader {
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
@@ -67,15 +78,19 @@ export function createGeminiOrderReader(opts: {
   const ai = opts.generate ? null : new GoogleGenAI({ apiKey: opts.apiKey });
   const generate =
     opts.generate ??
-    (async (req: { model: string; prompt: string; text: string }) => {
+    (async (req: GenerateRequest) => {
+      const parts = [
+        ...(req.text ? [{ text: req.text }] : []),
+        ...(req.image ? [{ inlineData: req.image }] : []),
+      ];
       const r = await ai!.models.generateContent({
         model: req.model,
-        contents: req.text,
+        contents: req.image ? [{ role: 'user', parts }] : req.text,
         config: {
           systemInstruction: req.prompt,
           temperature: 0.1,
           responseMimeType: 'application/json',
-          responseJsonSchema: READ_RESULT_JSON_SCHEMA,
+          responseJsonSchema: req.responseJsonSchema,
           // The single timeout: client-side, so the request is still billed by Google.
           abortSignal: AbortSignal.timeout(timeoutMs),
         },
@@ -83,26 +98,56 @@ export function createGeminiOrderReader(opts: {
       return r.text ?? '';
     });
 
+  async function call<T>(req: GenerateRequest, parse: (raw: string) => T): Promise<T> {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return parse(await generate(req));
+      } catch (error) {
+        if (error instanceof AiUnavailableError) throw error;
+        const status = statusOf(error);
+        // Only rate limits and server errors are worth one more try; a timeout has used its budget.
+        const retryable = status !== null && (status === 429 || status >= 500);
+        if (!retryable || attempt >= 1) {
+          throw new AiUnavailableError(
+            isTimeout(error) ? 'The assistant took too long to answer.' : undefined,
+          );
+        }
+        await sleep(RETRY_BACKOFF_MS);
+      }
+    }
+  }
+
   return {
     model: opts.model,
     async readOrderText({ text: pasted, catalogue }) {
-      const req = { model: opts.model, prompt: buildPrompt(catalogue), text: pasted };
-      for (let attempt = 0; ; attempt++) {
-        try {
-          return toReadResult(await generate(req));
-        } catch (error) {
-          if (error instanceof AiUnavailableError) throw error;
-          const status = statusOf(error);
-          // Only rate limits and server errors are worth one more try; a timeout has used its budget.
-          const retryable = status !== null && (status === 429 || status >= 500);
-          if (!retryable || attempt >= 1) {
-            throw new AiUnavailableError(
-              isTimeout(error) ? 'The assistant took too long to answer.' : undefined,
-            );
-          }
-          await sleep(RETRY_BACKOFF_MS);
-        }
-      }
+      return call(
+        {
+          model: opts.model,
+          prompt: buildPrompt(catalogue),
+          text: pasted,
+          responseJsonSchema: READ_RESULT_JSON_SCHEMA,
+        },
+        toReadResult,
+      );
+    },
+    async readPriceList({ text: pasted, image, products }) {
+      return call(
+        {
+          model: opts.model,
+          prompt: buildPriceListPrompt(products),
+          text: pasted ?? '',
+          ...(image
+            ? {
+                image: {
+                  mimeType: image.mimeType,
+                  data: Buffer.from(image.bytes).toString('base64'),
+                },
+              }
+            : {}),
+          responseJsonSchema: PRICE_LIST_JSON_SCHEMA,
+        },
+        toPriceListResult,
+      );
     },
   };
 }

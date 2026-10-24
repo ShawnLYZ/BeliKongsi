@@ -5,7 +5,7 @@ import { getDeps } from '@/server/platform/deps';
 import { requireSupplierPage } from '@/server/platform/page-auth';
 import { getPageSession } from '@/server/platform/session-page';
 
-/** The supplier's products and price tiers, read-only. */
+/** The supplier's products and price tiers, each with a link to edit it. */
 export default async function SupplierProductsPage() {
   const { session, supplierId } = requireSupplierPage(await getPageSession());
   const products = await listSupplierProducts(getDeps(), personCaller(session), supplierId);

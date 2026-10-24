@@ -9,7 +9,7 @@ import { expectedReadyAt, nextCutoffAfter } from './schedule';
 
 const FEE_BPS = 200;
 
-/** Opens the product's next round with its tiers frozen as they are now. */
+/** Opens the product's next round with its tiers, unit and pack frozen as they are now. */
 export async function openNextRound(
   ctx: TxContext,
   productId: string,
@@ -39,6 +39,8 @@ export async function openNextRound(
       feeBps: FEE_BPS,
       buyAlonePriceSen: product.buyAlonePriceSen,
       unitWeightGrams: product.unitWeightGrams,
+      unitName: product.unitName,
+      packDescription: product.packDescription,
       status: 'open',
     },
   });

@@ -1,11 +1,13 @@
-import type { SupplierOrderStatus } from '@/generated/prisma/client';
+import type { PriceTier, Product, SupplierOrderStatus } from '@/generated/prisma/client';
 import type {
   SupplierOpenRoundView,
   SupplierOrderView,
   SupplierPayoutView,
   SupplierProductView,
 } from '@/lib/views/supplier';
-import { roundProgress } from '@/server/modules/rounds/read';
+import { resolveClock } from '@/server/adapters/clock';
+import { productImageUrl, roundProgress } from '@/server/modules/rounds/read';
+import { nextCutoffAfter } from '@/server/modules/rounds/schedule';
 import type { Caller } from '@/server/platform/caller';
 import type { AppDeps } from '@/server/platform/deps';
 import { requireSupplierAccess } from '@/server/platform/permissions';
@@ -41,8 +43,8 @@ export async function listSupplierOrders(
     supplierOrderId: o.id,
     roundId: o.roundId,
     productName: o.round.product.name,
-    packDescription: o.round.product.packDescription,
-    unitName: o.round.product.unitName,
+    packDescription: o.round.packDescription,
+    unitName: o.round.unitName,
     quantity: o.quantity,
     unitPriceSen: o.unitPriceSen,
     totalSen: o.totalSen,
@@ -72,6 +74,7 @@ export async function listSupplierRounds(
     views.push({
       roundId: r.id,
       productName: r.product.name,
+      unitName: r.unitName,
       cutoffAt: r.cutoffAt.toISOString(),
       totalQuantity: progress.totalQuantity,
       shopCount: progress.shopCount,
@@ -87,27 +90,72 @@ export async function listSupplierProducts(
   supplierId: string,
 ): Promise<SupplierProductView[]> {
   requireSupplierAccess(caller, supplierId);
-  const products = await deps.prisma.product.findMany({
-    where: { supplierId },
-    include: { tiers: { orderBy: { position: 'asc' } } },
-    orderBy: [{ name: 'asc' }, { id: 'asc' }],
-  });
-  return products.map((p) => ({
+  const [products, clock] = await Promise.all([
+    deps.prisma.product.findMany({
+      where: { supplierId },
+      include: { tiers: { orderBy: { position: 'asc' } }, rounds: OPEN_ROUND_CUTOFF },
+      orderBy: [{ name: 'asc' }, { id: 'asc' }],
+    }),
+    resolveClock(deps),
+  ]);
+  const now = clock.now();
+  return products.map((p) => toSupplierProductView(p, productImageUrl(deps, p), now));
+}
+
+/** The Prisma `include` for the product's open round's cut-off, as `toSupplierProductView` needs. */
+export const OPEN_ROUND_CUTOFF = {
+  where: { status: 'open' },
+  select: { cutoffAt: true },
+  take: 1,
+} as const;
+
+type ProductWithTiers = Product & { tiers: PriceTier[]; rounds: { cutoffAt: Date }[] };
+
+/**
+ * The cut-off of the first round a change made now reaches. The open round keeps its tiers, so it
+ * is the round after it; with none open, the round that opens next. Inactive products open none.
+ */
+function nextRoundCutoff(p: ProductWithTiers, now: Date): Date | null {
+  if (!p.active) return null;
+  return nextCutoffAfter(p, p.rounds[0]?.cutoffAt ?? now);
+}
+
+export function toSupplierProductView(
+  p: ProductWithTiers,
+  imageUrl: string | null,
+  now: Date,
+): SupplierProductView {
+  return {
     productId: p.id,
     name: p.name,
+    shortName: p.shortName,
+    category: p.category,
     packDescription: p.packDescription,
     unitName: p.unitName,
+    unitWeightGrams: p.unitWeightGrams,
     buyAlonePriceSen: p.buyAlonePriceSen,
-    tiers: p.tiers.map((t) => ({
-      position: t.position,
-      minQuantity: t.minQuantity,
-      unitPriceSen: t.unitPriceSen,
-    })),
+    tiers: [...p.tiers]
+      .sort((a, b) => a.position - b.position)
+      .map((t) => ({
+        position: t.position,
+        minQuantity: t.minQuantity,
+        unitPriceSen: t.unitPriceSen,
+      })),
+    aliases: p.aliases,
+    packConversions: Object.fromEntries(
+      Object.entries((p.packConversions ?? {}) as Record<string, unknown>).filter(
+        (e): e is [string, number] => typeof e[1] === 'number',
+      ),
+    ),
     cadence: p.cadence,
+    scheduleAnchorWeek: p.scheduleAnchorWeek,
     cutoffWeekday: p.cutoffWeekday,
     cutoffTime: p.cutoffTime,
     active: p.active,
-  }));
+    imageUrl,
+    imageAiGenerated: p.imageAiGenerated,
+    nextRoundCutoffAt: nextRoundCutoff(p, now)?.toISOString() ?? null,
+  };
 }
 
 /** Simulated payouts released after a hub check. */

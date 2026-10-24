@@ -74,7 +74,8 @@ async function chaseConfirmations(deps: AppDeps, now: Date): Promise<number> {
         where: { id: approval.subjectId },
         include: { supplier: { select: { name: true } }, round: { include: { product: true } } },
       });
-      const { shortName, unitName } = order.round.product;
+      const { shortName } = order.round.product;
+      const { unitName } = order.round;
       let sent = await notify(ctx, {
         type: 'supplier.confirm_reminder',
         audience: { supplierId: order.supplierId, roles: ['supplier'] },
@@ -169,7 +170,8 @@ async function chaseDispatches(deps: AppDeps, now: Date): Promise<number> {
       ) {
         return 0;
       }
-      const { shortName, unitName } = order.round.product;
+      const { shortName } = order.round.product;
+      const { unitName } = order.round;
       return notify(ctx, {
         type: 'ops.not_dispatched',
         audience: toOps,

@@ -10,9 +10,9 @@ export interface StorageAdapter {
   /** Product pictures are the only public bucket. */
   publicUrl(bucket: 'product-images', key: string): string;
   putObject(bucket: Bucket, key: string, bytes: Uint8Array, contentType: string): Promise<void>;
-  /** A short-lived link to upload one object of the given type, up to `maxBytes`, to the private bucket. */
+  /** A short-lived link to upload one object of the given type, up to `maxBytes`, to a bucket. */
   createSignedUploadUrl(
-    bucket: 'delivery-photos',
+    bucket: Bucket,
     key: string,
     opts: { contentType: string; maxBytes: number; expiresInSeconds: number },
   ): Promise<SignedUpload>;

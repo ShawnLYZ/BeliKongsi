@@ -1,4 +1,7 @@
+import Link from 'next/link';
+import { ChevronRight, FileText, Plus } from 'lucide-react';
 import type { SupplierProductView } from '@/lib/views/supplier';
+import { BUTTON_PRIMARY, BUTTON_SECONDARY } from '@/components/common/controls';
 import { EmptyState } from '@/components/common/empty-state';
 import { Money } from '@/components/common/money';
 
@@ -10,15 +13,26 @@ function clock12(hhmm: string): string {
   return `${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'am' : 'pm'}`;
 }
 
-/** The supplier's products and price tiers, read-only. */
+/** The supplier's products and price tiers, each with a link to change it (stories 113–115). */
 export function ProductList({ products }: { products: SupplierProductView[] }) {
   return (
     <div className="flex flex-col gap-4">
       <div>
         <h1 className="text-2xl font-bold">Products and tiers</h1>
         <p className="mt-1 text-base">
-          Read-only. To change a price or tier, contact BeliKongsi Ops.
+          Change your prices, tiers and schedules here. A round that is open keeps its prices, so a
+          change reaches shops from the next round.
         </p>
+      </div>
+      <div className="flex flex-col gap-2">
+        <Link href="/supplier/products/new" className={BUTTON_PRIMARY}>
+          <Plus aria-hidden="true" className="size-5" />
+          Add a product
+        </Link>
+        <Link href="/supplier/price-list" className={BUTTON_SECONDARY}>
+          <FileText aria-hidden="true" className="size-5" />
+          Import a price list
+        </Link>
       </div>
       {products.length === 0 ? (
         <EmptyState
@@ -72,6 +86,10 @@ export function ProductList({ products }: { products: SupplierProductView[] }) {
                   ))}
                 </tbody>
               </table>
+              <Link href={`/supplier/products/${p.productId}`} className={BUTTON_SECONDARY}>
+                Edit<span className="sr-only"> {p.name}</span>
+                <ChevronRight aria-hidden="true" className="size-5" />
+              </Link>
             </li>
           ))}
         </ul>

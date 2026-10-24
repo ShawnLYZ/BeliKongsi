@@ -34,8 +34,8 @@ async function withDb(
 }
 
 const insertRound = (id: string, status: string) =>
-  `insert into rounds (id, product_id, supplier_id, hub_id, cycle_label, opens_at, cutoff_at, expected_ready_at, tiers_snapshot, fee_bps, buy_alone_price_sen, unit_weight_grams, status)
-   values ('${id}', 'c0000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001', 'w1', now(), now(), now(), '[]', 300, 1000, 500, '${status}')`;
+  `insert into rounds (id, product_id, supplier_id, hub_id, cycle_label, opens_at, cutoff_at, expected_ready_at, tiers_snapshot, fee_bps, buy_alone_price_sen, unit_weight_grams, unit_name, pack_description, status)
+   values ('${id}', 'c0000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001', 'w1', now(), now(), now(), '[]', 300, 1000, 500, 'carton', 'd', '${status}')`;
 
 describe('database schema security', () => {
   it('enables row-level security with the app policy on every table', async () => {

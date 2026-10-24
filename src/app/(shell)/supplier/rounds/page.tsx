@@ -1,5 +1,5 @@
 import { OpenRoundList } from '@/components/supplier/open-round-list';
-import { listSupplierProducts, listSupplierRounds } from '@/server/modules/supplier-orders/portal';
+import { listSupplierRounds } from '@/server/modules/supplier-orders/portal';
 import { personCaller } from '@/server/platform/caller';
 import { getDeps } from '@/server/platform/deps';
 import { scheduleDueWork } from '@/server/platform/due-work';
@@ -11,11 +11,6 @@ export default async function SupplierRoundsPage() {
   const { session, supplierId } = requireSupplierPage(await getPageSession());
   const deps = getDeps();
   scheduleDueWork(deps);
-  const caller = personCaller(session);
-  const [rounds, products] = await Promise.all([
-    listSupplierRounds(deps, caller, supplierId),
-    listSupplierProducts(deps, caller, supplierId),
-  ]);
-  const unitOf = new Map(products.map((p) => [p.name, p.unitName]));
-  return <OpenRoundList rounds={rounds} unitOf={unitOf} />;
+  const rounds = await listSupplierRounds(deps, personCaller(session), supplierId);
+  return <OpenRoundList rounds={rounds} />;
 }

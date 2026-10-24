@@ -55,7 +55,8 @@ export async function draftSupplierOrder(
     select: { id: true },
   });
 
-  const { shortName, unitName } = round.product;
+  const { shortName } = round.product;
+  const { unitName } = round;
   const approval = await createApproval(ctx, {
     type: 'supplier_order',
     subjectType: 'supplier_order',

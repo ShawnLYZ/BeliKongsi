@@ -113,7 +113,7 @@ export async function createPayment(
       quantity: line.quantity,
       total: totalQuantity,
       priceLimitSen: line.priceLimitSen,
-      unitName: round.product.unitName,
+      unitName: round.unitName,
       points,
     });
     const door = q.destination.type === 'door';

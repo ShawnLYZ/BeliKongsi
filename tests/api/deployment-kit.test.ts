@@ -8,6 +8,11 @@ import {
 } from '../../scripts/lib/security-checks';
 import { getServerEnv, serverEnvKeys } from '../../src/server/platform/env';
 import { checkRemoteOnly, describeTarget } from '../../scripts/lib/prod-env';
+import {
+  ensureBuckets,
+  type BucketClient,
+  type BucketOptions,
+} from '../../scripts/lib/storage-buckets';
 import { createTestDatabase } from './helpers/db';
 
 async function withDb(fn: (db: { adminUrl: string; appUrl: string }) => Promise<void>) {
@@ -234,5 +239,53 @@ describe('prod script guards', () => {
   it('does not read env files or fill in missing variables', () => {
     const code = readFileSync('scripts/lib/prod-env.ts', 'utf8');
     expect(code).not.toMatch(/loadEnvFile/);
+  });
+});
+
+describe('prod storage buckets', () => {
+  const PHOTO_LIMITS = {
+    fileSizeLimit: 5 * 1024 * 1024,
+    allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp'],
+  };
+
+  /** A Storage client that records calls; `existing` buckets are already there. */
+  const fakeStorage = (existing: string[]) => {
+    const calls: [string, string, BucketOptions][] = [];
+    const client: BucketClient = {
+      listBuckets: async () => ({ data: existing.map((name) => ({ name })), error: null }),
+      createBucket: async (name, options) => {
+        calls.push(['create', name, options]);
+        return { error: null };
+      },
+      updateBucket: async (name, options) => {
+        calls.push(['update', name, options]);
+        return { error: null };
+      },
+    };
+    return { client, calls };
+  };
+
+  it('limits product photos to JPEG, PNG or WebP of 5 MB, like delivery photos', async () => {
+    const { client, calls } = fakeStorage([]);
+    expect(await ensureBuckets(client)).toEqual([
+      'Bucket product-images: created',
+      'Bucket delivery-photos: created',
+    ]);
+    expect(calls).toEqual([
+      ['create', 'product-images', { public: true, ...PHOTO_LIMITS }],
+      ['create', 'delivery-photos', { public: false, ...PHOTO_LIMITS }],
+    ]);
+  });
+
+  it('applies the limits to buckets that already exist', async () => {
+    const { client, calls } = fakeStorage(['product-images', 'delivery-photos']);
+    expect(await ensureBuckets(client)).toEqual([
+      'Bucket product-images: settings updated',
+      'Bucket delivery-photos: settings updated',
+    ]);
+    expect(calls).toEqual([
+      ['update', 'product-images', { public: true, ...PHOTO_LIMITS }],
+      ['update', 'delivery-photos', { public: false, ...PHOTO_LIMITS }],
+    ]);
   });
 });

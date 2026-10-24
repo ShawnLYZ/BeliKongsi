@@ -61,7 +61,7 @@ export async function closeRoundById(
     const result = closeRound({
       tiers,
       feeBps: round.feeBps,
-      unitName: round.product.unitName,
+      unitName: round.unitName,
       participants: parts.map((p) => ({
         id: p.id,
         quantity: p.quantity,
@@ -232,7 +232,8 @@ export async function closeRoundById(
       select: { id: true },
       orderBy: { id: 'asc' },
     });
-    const { shortName, unitName } = round.product;
+    const { shortName } = round.product;
+    const { unitName } = round;
     for (const { id: shopId } of shops) {
       const mine = result.participants
         .map((r) => ({ r, p: byId.get(r.id)! }))

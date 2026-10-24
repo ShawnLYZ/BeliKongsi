@@ -171,7 +171,7 @@ export async function evaluateAutoApprove(
         quantity: line.quantity,
         total: totalQuantity,
         priceLimitSen: line.priceLimitSen,
-        unitName: round.product.unitName,
+        unitName: round.unitName,
         points,
       });
       if (q.starting.allInSen >= usual) return 'not_eligible';

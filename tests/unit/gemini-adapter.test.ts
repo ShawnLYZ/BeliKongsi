@@ -3,7 +3,9 @@ import {
   AiUnavailableError,
   createGeminiOrderReader,
   toReadResult,
+  type GenerateRequest,
 } from '@/server/adapters/ai/gemini';
+import { PRICE_LIST_JSON_SCHEMA, toPriceListResult } from '@/server/adapters/ai/price-list';
 
 const VALID = JSON.stringify({
   lines: [
@@ -81,5 +83,78 @@ describe('Gemini order reader', () => {
       note: null,
       unitAsWritten: null,
     });
+  });
+});
+
+describe('Gemini price-list reader', () => {
+  const PRICE_LIST = JSON.stringify({
+    lines: [
+      {
+        sourceText: 'Susu pekat 20 ctn RM157',
+        productId: 'p1',
+        proposedName: null,
+        packDescription: null,
+        unitName: 'carton',
+        buyAlonePriceSen: 16800,
+        tiers: [{ minQuantity: 20, unitPriceSen: 15700 }],
+        confidence: 0.9,
+        note: null,
+      },
+    ],
+    ignoredText: [],
+  });
+
+  it('sends a photo as an inline image part with the price-list schema', async () => {
+    const generate = vi.fn<(req: GenerateRequest) => Promise<string>>(async () => PRICE_LIST);
+    const r = createGeminiOrderReader({ apiKey: 'k', model: 'm', generate });
+    const bytes = new Uint8Array([0xff, 0xd8, 0xff, 0x01]);
+    const result = await r.readPriceList({
+      image: { bytes, mimeType: 'image/jpeg' },
+      products: [],
+    });
+    const req = generate.mock.calls[0]![0];
+    expect(req.image).toEqual({
+      mimeType: 'image/jpeg',
+      data: Buffer.from(bytes).toString('base64'),
+    });
+    expect(req.text).toBe('');
+    expect(req.responseJsonSchema).toBe(PRICE_LIST_JSON_SCHEMA);
+    expect(result.lines[0]!.tiers).toEqual([{ minQuantity: 20, unitPriceSen: 15700 }]);
+  });
+
+  it('sends pasted text without an image part, and retries like order reading', async () => {
+    const generate = vi
+      .fn<(req: GenerateRequest) => Promise<string>>()
+      .mockRejectedValueOnce(Object.assign(new Error('busy'), { status: 503 }))
+      .mockResolvedValueOnce(PRICE_LIST);
+    const sleep = vi.fn<(ms: number) => Promise<void>>(async () => undefined);
+    const r = createGeminiOrderReader({ apiKey: 'k', model: 'm', generate, sleep });
+    await r.readPriceList({ text: 'Susu pekat 20 ctn RM157', products: [] });
+    expect(generate).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledExactlyOnceWith(2000);
+    expect(generate.mock.calls[1]![0].image).toBeUndefined();
+  });
+
+  it('drops tiers it cannot read and unknown units, keeping odd prices for the server', () => {
+    const raw = JSON.stringify({
+      lines: [
+        {
+          sourceText: 'x',
+          unitName: 'crate',
+          buyAlonePriceSen: 100.5,
+          tiers: [
+            { minQuantity: 10, unitPriceSen: 'RM5' },
+            { minQuantity: 20, unitPriceSen: 90 },
+          ],
+        },
+      ],
+    });
+    expect(toPriceListResult(raw).lines[0]).toMatchObject({
+      unitName: null,
+      buyAlonePriceSen: 100.5,
+      tiers: [{ minQuantity: 20, unitPriceSen: 90 }],
+      productId: null,
+    });
+    expect(() => toPriceListResult('nope')).toThrow(AiUnavailableError);
   });
 });

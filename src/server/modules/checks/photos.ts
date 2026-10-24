@@ -19,6 +19,11 @@ export const EXTENSIONS: Record<string, string> = {
   'image/webp': 'webp',
 };
 
+/** The file extension for an allowed photo type (own entries only), or undefined. */
+export function photoExtension(contentType: string): string | undefined {
+  return Object.hasOwn(EXTENSIONS, contentType) ? EXTENSIONS[contentType] : undefined;
+}
+
 /**
  * Shop staff or the owner ask to upload one delivery photo (PRD §11, story 79) once the goods
  * are handed over and before the check is sent. Only JPEG, PNG and WebP up to 5 MB are accepted
@@ -49,7 +54,7 @@ export async function requestPhotoUpload(
   if (pickup.status !== 'collected' && pickup.status !== 'delivered') {
     throw conflict('NOT_COLLECTED', 'Photos can be added once the goods have been handed over.');
   }
-  const ext = EXTENSIONS[input.contentType];
+  const ext = photoExtension(input.contentType);
   if (!ext) {
     throw unprocessable('UNSUPPORTED_TYPE', 'Please choose a JPEG, PNG or WebP photo.');
   }

@@ -59,7 +59,7 @@ async function productsOf(db: Db, allocations: { id: string; participationId: st
     select: {
       id: true,
       roundId: true,
-      round: { select: { product: { select: { name: true, unitName: true } } } },
+      round: { select: { unitName: true, product: { select: { name: true } } } },
     },
   });
   const byPart = new Map(parts.map((p) => [p.id, p]));
@@ -68,7 +68,7 @@ async function productsOf(db: Db, allocations: { id: string; participationId: st
       const p = byPart.get(a.participationId)!;
       return [
         a.id,
-        { roundId: p.roundId, name: p.round.product.name, unitName: p.round.product.unitName },
+        { roundId: p.roundId, name: p.round.product.name, unitName: p.round.unitName },
       ] as const;
     }),
   );

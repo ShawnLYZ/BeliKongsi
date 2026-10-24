@@ -203,7 +203,7 @@ export async function cancelLateItem(
       link: pickup ? `/owner/pickups/${pickup.id}` : '/owner/pickups',
       message: TEMPLATES['delivery.late_cancelled']({
         quantity: units,
-        unitName: part.round.product.unitName,
+        unitName: part.round.unitName,
         shortName: part.round.product.shortName,
         refundSen: refundSen + deliveryFeeRefundSen,
       }),

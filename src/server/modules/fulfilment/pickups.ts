@@ -132,9 +132,9 @@ type Part = {
   deliveryDate: string;
   round: {
     status: RoundStatus;
+    unitName: string;
     product: {
       name: string;
-      unitName: string;
       category: string;
       imageKey: string | null;
       imageAiGenerated: boolean;
@@ -148,10 +148,10 @@ async function pickupViews(deps: AppDeps, shopId: string): Promise<PickupView[]>
   const roundSelect = {
     select: {
       status: true,
+      unitName: true,
       product: {
         select: {
           name: true,
-          unitName: true,
           category: true,
           imageKey: true,
           imageAiGenerated: true,
@@ -246,7 +246,7 @@ async function pickupViews(deps: AppDeps, shopId: string): Promise<PickupView[]>
     participationId: p.id,
     readyToCollect: false,
     productName: p.round.product.name,
-    unitName: p.round.product.unitName,
+    unitName: p.round.unitName,
     quantity: p.quantity,
     ...pictureOf(p.round.product),
   });
@@ -271,7 +271,7 @@ async function pickupViews(deps: AppDeps, shopId: string): Promise<PickupView[]>
         participationId: a.participationId,
         readyToCollect: collectableNow(p, a),
         productName: part.round.product.name,
-        unitName: part.round.product.unitName,
+        unitName: part.round.unitName,
         quantity: a.allocated,
         ...pictureOf(part.round.product),
       };

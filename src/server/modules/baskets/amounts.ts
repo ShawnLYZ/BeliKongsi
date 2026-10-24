@@ -118,7 +118,7 @@ export async function basketTotals(
       quantity: line.quantity,
       currentRoundTotal: inRound.get(round.id) ?? 0,
       priceLimitSen: line.priceLimitSen,
-      unitName: round.product.unitName,
+      unitName: round.unitName,
     });
     itemsAtStartingSen += q.startingLineSen;
     feeIncludedSen += q.starting.feeSen * line.quantity;

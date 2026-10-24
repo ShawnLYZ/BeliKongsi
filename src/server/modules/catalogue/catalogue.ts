@@ -56,13 +56,15 @@ export async function searchCatalogue(
     .filter((x): x is { p: Row; rank: number } => x.rank !== null)
     .sort((a, b) => a.rank - b.rank);
 
+  // A product with an open round is shown in that round's unit and pack, frozen when it opened.
+  const unitOf = (p: Row) => p.rounds[0] ?? p;
   if (isStaff(caller)) {
     return ranked.map(({ p }) => ({
       productId: p.id,
       name: p.name,
       shortName: p.shortName,
-      packDescription: p.packDescription,
-      unitName: p.unitName,
+      packDescription: unitOf(p).packDescription,
+      unitName: unitOf(p).unitName,
       category: p.category,
       imageUrl: productImageUrl(deps, p),
       imageAiGenerated: p.imageAiGenerated,
@@ -77,8 +79,8 @@ export async function searchCatalogue(
       productId: p.id,
       name: p.name,
       shortName: p.shortName,
-      packDescription: p.packDescription,
-      unitName: p.unitName,
+      packDescription: unitOf(p).packDescription,
+      unitName: unitOf(p).unitName,
       category: p.category,
       supplierName: p.supplier.name,
       imageUrl: productImageUrl(deps, p),

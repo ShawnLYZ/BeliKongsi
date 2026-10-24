@@ -246,6 +246,7 @@ enum ActorType {
 
 enum AiRunKind {
   usual_list_text
+  price_list
 }
 
 enum AiRunStatus {
@@ -333,6 +334,7 @@ model Supplier {
   products     Product[]
   rounds       Round[]
   orders       SupplierOrder[]
+  aiRuns       AiSuggestionRun[]
 
   @@map("suppliers")
 }
@@ -422,6 +424,8 @@ model Round {
   feeBps            Int             @map("fee_bps")
   buyAlonePriceSen  Int             @map("buy_alone_price_sen")
   unitWeightGrams   Int             @map("unit_weight_grams")
+  unitName          UnitName        @map("unit_name")
+  packDescription   String          @map("pack_description")
   status            RoundStatus
   finalTier         Int?            @map("final_tier")
   finalUnitPriceSen Int?            @map("final_unit_price_sen")
@@ -922,9 +926,13 @@ model ActivityChainHead {
   @@map("activity_chain_head")
 }
 
+/// Belongs to exactly one shop (usual-list reading) or one supplier (price-list import); a CHECK
+/// constraint in the migration enforces it.
 model AiSuggestionRun {
   id            String      @id @default(uuid()) @db.Uuid
-  shopId        String      @map("shop_id") @db.Uuid
+  shopId        String?     @map("shop_id") @db.Uuid
+  supplierId    String?     @map("supplier_id") @db.Uuid
+  supplier      Supplier?   @relation(fields: [supplierId], references: [id])
   kind          AiRunKind
   redactedInput String      @map("redacted_input")
   model         String
@@ -935,6 +943,7 @@ model AiSuggestionRun {
   confirmedAt   DateTime?   @map("confirmed_at") @db.Timestamptz
   changeSummary Json?       @map("change_summary")
 
+  @@index([supplierId])
   @@map("ai_suggestion_runs")
 }
 

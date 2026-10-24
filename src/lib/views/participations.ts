@@ -45,7 +45,8 @@ export function participationView(
     round: {
       cutoffAt: Date;
       expectedReadyAt: Date;
-      product: { id: string; name: string; shortName: string; unitName: string };
+      unitName: string;
+      product: { id: string; name: string; shortName: string };
     };
   },
   imageUrl: string | null,
@@ -59,7 +60,7 @@ export function participationView(
     productId: round.product.id,
     productName: round.product.name,
     shortName: round.product.shortName,
-    unitName: round.product.unitName,
+    unitName: round.unitName,
     imageUrl,
     quantity: p.quantity,
     status: p.status,

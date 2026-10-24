@@ -361,7 +361,7 @@ async function recordWithLines(
   const parts = await tx.participation.findMany({
     where: { id: { in: allocations.map((a) => a.participationId) } },
     include: {
-      round: { include: { product: { select: { shortName: true, unitName: true } } } },
+      round: { include: { product: { select: { shortName: true } } } },
     },
   });
   const partOf = new Map(parts.map((p) => [p.id, p]));
@@ -465,7 +465,11 @@ async function recordWithLines(
     where: { id: pickup.shopId },
     select: { name: true },
   });
-  const productOf = (a: Allocation) => partOf.get(a.participationId)!.round.product;
+  // The unit is the round's, frozen when it opened, so a later product edit cannot change it.
+  const productOf = (a: Allocation) => {
+    const { round } = partOf.get(a.participationId)!;
+    return { shortName: round.product.shortName, unitName: round.unitName };
+  };
   const photoCount = (allocationId: string) =>
     inputLines.find((l) => l.allocationId === allocationId)?.photoIds.length ?? 0;
   const approval = await createApproval(ctx, {

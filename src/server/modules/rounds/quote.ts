@@ -150,6 +150,6 @@ export async function quoteForShop(
     quantity: i.quantity,
     total: totalQuantity,
     priceLimitSen: i.priceLimitSen ?? null,
-    unitName: round.product.unitName,
+    unitName: round.unitName,
   });
 }

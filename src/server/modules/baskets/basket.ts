@@ -99,7 +99,10 @@ export async function getCurrentBasket(
   });
 }
 
-/** A basket's lines, each with its product (BasketLine has no relation to Product). */
+/**
+ * A basket's lines, each with its product (BasketLine has no relation to Product) and the unit and
+ * pack it is counted in: its round's, frozen when the round opened, or the product's before then.
+ */
 async function linesWithProducts(
   ctx: TxContext,
   basketId: string,
@@ -109,8 +112,17 @@ async function linesWithProducts(
   const products = await ctx.tx.product.findMany({
     where: { id: { in: lines.map((l) => l.productId) } },
   });
+  const rounds = await ctx.tx.round.findMany({
+    where: { id: { in: lines.flatMap((l) => (l.roundId ? [l.roundId] : [])) } },
+    select: { id: true, unitName: true, packDescription: true },
+  });
   const byId = new Map(products.map((p) => [p.id, p]));
-  return lines.map((l) => ({ ...l, product: byId.get(l.productId)! }));
+  const unitOf = new Map(rounds.map((r) => [r.id, r]));
+  return lines.map((l) => {
+    const product = byId.get(l.productId)!;
+    const { unitName, packDescription } = (l.roundId && unitOf.get(l.roundId)) || product;
+    return { ...l, product, unitName, packDescription };
+  });
 }
 
 async function staffView(ctx: TxContext, basket: WeeklyBasket): Promise<StaffBasketView> {
@@ -126,8 +138,8 @@ async function staffView(ctx: TxContext, basket: WeeklyBasket): Promise<StaffBas
         lineId: l.id,
         productId: l.productId,
         name: l.product.name,
-        packDescription: l.product.packDescription,
-        unitName: l.product.unitName,
+        packDescription: l.packDescription,
+        unitName: l.unitName,
         imageUrl: productImageUrl(ctx.deps, l.product),
         quantity: l.quantity,
         waitingForOwner: basket.status === 'draft',
@@ -222,8 +234,8 @@ async function ownerView(ctx: TxContext, basket: WeeklyBasket): Promise<OwnerBas
       productId: l.productId,
       name: l.product.name,
       shortName: l.product.shortName,
-      packDescription: l.product.packDescription,
-      unitName: l.product.unitName,
+      packDescription: l.packDescription,
+      unitName: l.unitName,
       imageUrl: productImageUrl(deps, l.product),
       quantity: l.quantity,
       priceLimitSen: l.priceLimitSen,
@@ -276,7 +288,7 @@ async function ownerView(ctx: TxContext, basket: WeeklyBasket): Promise<OwnerBas
       quantity: l.quantity,
       total: totalQuantity,
       priceLimitSen: l.priceLimitSen,
-      unitName: l.product.unitName,
+      unitName: l.unitName,
     });
     const projectedAllInSen = q.withYou.amounts?.allInSen ?? null;
     const savings =
@@ -298,7 +310,7 @@ async function ownerView(ctx: TxContext, basket: WeeklyBasket): Promise<OwnerBas
       projectedAllInSen,
       estimatedSavingsSen: savings?.savingSen ?? null,
       savingsStatus: 'estimated' as const,
-      explanation: explainQuote(q, l.quantity, l.product.unitName),
+      explanation: explainQuote(q, l.quantity, l.unitName),
     });
   }
 
@@ -459,7 +471,8 @@ export async function addBasketLine(
         message: TEMPLATES['basket.staff_added']({
           staffName: user.displayName,
           quantity: input.quantity,
-          unitName: product.unitName,
+          // Counted in the unit of the round it joins, frozen when that round opened.
+          unitName: roundIn(targetWeek)?.unitName ?? product.unitName,
           shortName: product.shortName,
           when: routedToNextWeek ? 'next' : 'this',
         }),

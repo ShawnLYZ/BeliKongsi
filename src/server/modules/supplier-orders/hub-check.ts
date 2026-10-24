@@ -163,7 +163,8 @@ export async function recordHubCheck(
 
     const result = allocate(kept, input.goodUnits, round.finalUnitPriceSen ?? 0);
     const byId = new Map(kept.map((p) => [p.id, p]));
-    const { unitName, shortName } = round.product;
+    const { shortName } = round.product;
+    const { unitName } = round;
 
     // Allocations and shortfall refunds out of the round hold.
     const missingByShop = new Map<string, { units: number; refundSen: number }>();

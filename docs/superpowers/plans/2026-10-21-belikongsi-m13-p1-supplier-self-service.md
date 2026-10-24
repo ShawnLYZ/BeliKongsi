@@ -38,6 +38,8 @@
 - [ ] **Step 2:** Follow index §6. Confirm the consumed names: `validateTiers`, `openNextRound`, `closeRoundById` (it skips inactive products), `createGeminiOrderReader` and its injectable `generate`, `redactPersonalData`, `enforceRateLimit`, `StorageAdapter.createSignedUploadUrl`.
 - [ ] **Step 3:** Commit any plan edits.
 
+**Re-sync notes (2026-10-24):** `openNextRound` is `(ctx: TxContext, productId, opensAt)`; `createSignedUploadUrl` was typed for `delivery-photos` only, so Task 2 also widens `storage/types.ts`; Gemini's injectable `generate` is text-only, so Task 3 widens it. All other consumed names match.
+
 ---
 
 ### Task 1: Creating and editing products, tiers and schedules (P1-12)
@@ -52,7 +54,7 @@
 
 - Produces:
   - `ProductInput = { name; shortName; category; packDescription; unitName; unitWeightGrams: number; buyAlonePriceSen: number; aliases: string[]; packConversions?: Record<string, number>; cadence: Cadence; scheduleAnchorWeek?: string; cutoffWeekday: number; cutoffTime: string; tiers: { minQuantity: number; unitPriceSen: number }[] }`.
-  - `createSupplierProduct(deps, caller, supplierId, input: ProductInput): Promise<SupplierProductView>`. It validates (Zod gives 400; tiers give 422 `INVALID_TIERS` with `details.errors` from `validateTiers`), creates the product (`imageAiGenerated: false`), runs `openNextRound(now)`, and logs `product.created`.
+  - `createSupplierProduct(deps, caller, supplierId, input: ProductInput): Promise<SupplierProductView>`. It validates (Zod gives 400; tiers give 422 `INVALID_TIERS` with `details.errors` from `validateTiers`), creates the product (`imageAiGenerated: false`), runs `openNextRound(ctx, product.id, now)` in the same transaction, and logs `product.created`.
   - `updateSupplierProduct(deps, caller, supplierId, productId, patch: Partial<ProductInput> & { active?: boolean; imageKey?: string }): Promise<SupplierProductView>`. It never touches the open round, and logs `product.updated` with before and after.
   - Supplier only, for their own products; another supplier gets 404.
 
@@ -118,7 +120,7 @@ it("hides another supplier's products", async () => {
 **Files:**
 
 - Create: `src/app/api/suppliers/[supplierId]/products/[id]/image/route.ts`
-- Modify: `src/server/adapters/storage/local.ts` and `supabase.ts` (signed uploads for `product-images`), `src/server/modules/catalogue/supplier-edit.ts`
+- Modify: `src/server/adapters/storage/types.ts` (widen `createSignedUploadUrl`'s bucket to `Bucket`), `local.ts` and `supabase.ts` (signed uploads for `product-images`), `src/server/modules/catalogue/supplier-edit.ts`
 - Test: `tests/api/supplier-product-image.test.ts`
 
 **Interfaces:**
@@ -138,7 +140,7 @@ it("hides another supplier's products", async () => {
 **Files:**
 
 - Create: `src/server/adapters/ai/price-list.ts` (prompt, JSON schema, `toPriceListResult`), `src/server/modules/catalogue/price-list.ts`, `src/app/api/suppliers/[supplierId]/price-list/parse/route.ts`, `src/app/api/suppliers/[supplierId]/price-list/confirm/route.ts`, `tests/fixtures/price-lists/dry-goods.txt`
-- Modify: `src/server/adapters/ai/types.ts` (`OrderReader.readPriceList`), `gemini.ts` (image input as `inlineData`), `fake.ts`
+- Modify: `src/server/adapters/ai/types.ts` (`OrderReader.readPriceList`), `gemini.ts` (image input as `inlineData`; the injectable `generate` currently takes `{ model, prompt, text }` and gains an optional image part), `fake.ts`
 - Test: `tests/api/price-list-import.test.ts`
 
 **Interfaces:**
